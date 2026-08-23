@@ -410,16 +410,11 @@ CREATE TABLE identities (
     is_default BOOLEAN DEFAULT FALSE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    deleted_at DATETIME,
-    -- MySQL 不支持部分唯一索引，用生成列实现"每个用户仅一个默认身份"
-    default_user_id CHAR(36) GENERATED ALWAYS AS (
-        CASE WHEN is_default = TRUE AND deleted_at IS NULL THEN user_id ELSE NULL END
-    ) STORED
+    deleted_at DATETIME
 );
 
 CREATE INDEX idx_identities_user_id ON identities(user_id);
 CREATE INDEX idx_identities_deleted_at ON identities(deleted_at);
-CREATE UNIQUE INDEX idx_identities_user_default ON identities(default_user_id);
 ```
 
 #### audio_sessions 表（语音会话表）

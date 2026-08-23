@@ -275,14 +275,9 @@ CREATE TABLE identities (
     is_default BOOLEAN DEFAULT FALSE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    deleted_at DATETIME,
-    -- MySQL 不支持部分唯一索引，用生成列实现"每个用户仅一个默认身份"
-    default_user_id CHAR(36) GENERATED ALWAYS AS (
-        CASE WHEN is_default = TRUE AND deleted_at IS NULL THEN user_id ELSE NULL END
-    ) STORED
+    deleted_at DATETIME
 );
 CREATE INDEX idx_identities_user_id ON identities(user_id);
-CREATE UNIQUE INDEX idx_identities_user_default ON identities(default_user_id);
 ```
 
 ### HTTP 端点
@@ -295,7 +290,7 @@ CREATE UNIQUE INDEX idx_identities_user_default ON identities(default_user_id);
 | PUT    | /api/v1/identities/:id/default | 设为默认 |
 
 ### 验收标准
-- [ ] 每个用户最多一个默认身份（生成列唯一索引兜底）。
+- [ ] 每个用户最多一个默认身份（服务层事务保证，见 `identity.SetDefault`）。
 - [ ] 删除默认身份后需指定新默认，或禁止删除唯一默认身份。
 
 ---

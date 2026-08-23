@@ -38,12 +38,8 @@ CREATE TABLE IF NOT EXISTS identities (
     created_at      DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at      DATETIME    NULL,
-    default_user_id CHAR(36) GENERATED ALWAYS AS (
-        CASE WHEN is_default = 1 AND deleted_at IS NULL THEN user_id ELSE NULL END
-    ) STORED,
     PRIMARY KEY (id),
     KEY idx_identities_user_id (user_id),
-    UNIQUE KEY uq_identities_user_default (default_user_id),
     CONSTRAINT fk_identities_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
