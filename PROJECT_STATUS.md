@@ -24,7 +24,11 @@ Pulse 是一个智能身份空间系统，通过可穿戴硬件设备采集用�
 - **移动端**: 待定（未来可能使用 React Native）
 
 ### 硬件
-- **技术栈**: 待定
+- **单片机**: ESP32 / STM32 等（待选型）
+- **RTOS**: FreeRTOS / RT-Thread
+- **界面框架**: LVGL
+- **开发环境**: VSCode + PlatformIO
+- **编程语言**: C / Arduino
 
 ## 📁 项目结构
 

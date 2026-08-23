@@ -4,11 +4,16 @@
 
 ## 技术栈
 
-**待定** - 硬件技术栈尚未确定
+- **单片机**: 待定（ESP32 系列 / STM32 系列等）
+- **RTOS**: FreeRTOS / RT-Thread
+- **界面框架**: LVGL
+- **开发环境**: VSCode + PlatformIO
+- **编程语言**: C / Arduino
 
 ## 规划中的功能
 
 - 🎤 语音采集
+- 🖥️ LVGL 图形界面显示
 - 📡 网络连接（WiFi/蓝牙/4G）
 - 🔋 电源管理
 - 💾 本地缓存
@@ -18,41 +23,71 @@
 
 ```
 hardware/
-├── firmware/          # 固件代码（待定技术栈）
+├── firmware/          # 固件代码
+│   ├── platformio.ini # PlatformIO 配置
+│   ├── src/           # 源代码
+│   └── include/       # 头文件
 ├── pcb/              # PCB 设计文件（待定）
 ├── enclosure/        # 外壳设计（待定）
 └── docs/             # 硬件文档
 ```
 
-## 开发状态
+## 开发环境搭建
 
-⚠️ 硬件开发尚未开始，技术栈待确定后再进行开发。
+### 1. 安装 VSCode
 
-## 可能的技术方向
+下载并安装 [Visual Studio Code](https://code.visualstudio.com/)
 
-以下仅为参考，最终技术栈需要根据需求决定：
-- ESP32 系列（WiFi + 蓝牙）
-- STM32 系列（低功耗）
-- Nordic nRF 系列（蓝牙）
-- 其他嵌入式方案
+### 2. 安装 PlatformIO 插件
 
-## 硬件需求
+在 VSCode 中安装 PlatformIO IDE 扩展
 
-### 核心需求
+### 3. 创建项目
+
+```bash
+cd hardware/firmware
+# PlatformIO 会自动识别 platformio.ini
+```
+
+### 4. 编译和上传
+
+```bash
+# 编译
+pio run
+
+# 上传到设备
+pio run --target upload
+
+# 串口监视
+pio device monitor
+```
+
+## 技术要点
+
+### RTOS 任务管理
+- 音频采集任务
+- 网络通信任务
+- UI 更新任务
+- 电源管理任务
+
+### LVGL 界面
+- 状态显示（录音中/待机/充电）
+- 设置界面（WiFi 配置等）
+- 电量显示
+- 简洁的交互设计
+
+### 硬件需求
+
 - 麦克风：高质量音频采集
-- 处理器：能处理音频和网络通信
+- 显示屏：支持 LVGL（LCD/OLED）
+- 处理器：能处理音频、RTOS、LVGL 和网络通信
 - 电源：续航 > 8 小时
 - 存储：临时缓存音频数据
 - 网络：能够上传数据到云端
 
-### 可选需求
-- LED 指示灯：状态显示
-- 按钮：手动控制
-- 震动马达：提醒功能
-
 ---
 
-**当前状态**：技术栈待定，暂不开发
+**当前状态**：技术栈已确定，等待单片机型号选择后开始开发
 
 ## 项目结构
 

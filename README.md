@@ -87,7 +87,11 @@ npm run dev
 - **移动端**：待定（未来可能使用 React Native）
 
 ### 硬件
-- **技术栈**：待定
+- **单片机**：ESP32 / STM32 等
+- **RTOS**：FreeRTOS / RT-Thread
+- **界面**：LVGL
+- **开发环境**：VSCode + PlatformIO
+- **语言**：C / Arduino
 
 ## 开发路线图
 
