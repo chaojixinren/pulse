@@ -6,7 +6,7 @@
 
 - **语言**：Go 1.26.5
 - **框架**：Gin
-- **AI SDK**：OpenAI 兼容 chat/completions（net/http）
+- **AI SDK**：adk-go（Google Agent Development Kit）
 - **STT 服务**：StepFun StepAudio-2.5-ASR
 - **数据库**：MySQL 8.0+
 - **缓存**：Redis 7+

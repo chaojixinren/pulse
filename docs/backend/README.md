@@ -6,7 +6,7 @@
 ## 技术栈（已确定）
 
 - **语言/框架**：Go 1.26.5 / Gin
-- **AI SDK**：OpenAI 兼容 chat/completions（net/http）
+- **AI SDK**：adk-go（Google Agent Development Kit）
 - **STT**：StepFun StepAudio-2.5-ASR
 - **数据库**：MySQL 8.0+（主数据）
 - **缓存**：Redis 7+（会话、热点数据）
