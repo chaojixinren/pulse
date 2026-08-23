@@ -50,7 +50,7 @@ func (w *AudioProcessor) Run(ctx context.Context) {
 }
 
 func (w *AudioProcessor) processBatch(ctx context.Context) {
-	sessions, err := w.sessions.ListPending(ctx, w.batchSize)
+	sessions, err := w.sessions.ListProcessable(ctx, w.batchSize)
 	if err != nil {
 		logger.Log.Error("拉取 pending 会话失败", zap.Error(err))
 		return

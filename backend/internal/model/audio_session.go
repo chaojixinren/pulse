@@ -20,11 +20,11 @@ var validStatus = map[string]bool{
 // IsValidStatus 判断状态字符串是否合法。
 func IsValidStatus(s string) bool { return validStatus[s] }
 
-// 状态机：pending → processing → completed；processing/pending → failed；failed → processing/pending（重试）。
+// 状态机：pending → processing → completed；processing → failed；failed → processing（重试）。
 var allowedTransitions = map[string]map[string]bool{
 	StatusPending:    {StatusProcessing: true, StatusFailed: true},
 	StatusProcessing: {StatusCompleted: true, StatusFailed: true},
-	StatusFailed:     {StatusProcessing: true, StatusPending: true},
+	StatusFailed:     {StatusProcessing: true},
 	StatusCompleted:  {},
 }
 

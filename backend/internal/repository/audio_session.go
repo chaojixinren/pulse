@@ -122,11 +122,12 @@ func (r *AudioSessionRepo) UpdateTranscript(ctx context.Context, id, transcript 
 	return err
 }
 
-// ClaimProcessing 原子地将 pending 会话置为 processing，避免多 worker 重复处理。
+// ClaimProcessing 原子地将 pending（或重试后重新进入 processing）的会话置为 processing。
+// Phase 1 为单 worker，故 processing 的重入是幂等的；多 worker 下 pending→processing 仍是原子独占。
 func (r *AudioSessionRepo) ClaimProcessing(ctx context.Context, id string) (bool, error) {
 	res, err := r.db.ExecContext(ctx,
-		`UPDATE audio_sessions SET status = ?, updated_at = ? WHERE id = ? AND status = ?`,
-		model.StatusProcessing, time.Now().UTC(), id, model.StatusPending)
+		`UPDATE audio_sessions SET status = ?, updated_at = ? WHERE id = ? AND status IN (?, ?)`,
+		model.StatusProcessing, time.Now().UTC(), id, model.StatusPending, model.StatusProcessing)
 	if err != nil {
 		return false, err
 	}
@@ -137,10 +138,11 @@ func (r *AudioSessionRepo) ClaimProcessing(ctx context.Context, id string) (bool
 	return n > 0, nil
 }
 
-func (r *AudioSessionRepo) ListPending(ctx context.Context, limit int) ([]model.AudioSession, error) {
+// ListProcessable 返回待处理的会话：pending，以及重试后重新进入 processing 的会话。
+func (r *AudioSessionRepo) ListProcessable(ctx context.Context, limit int) ([]model.AudioSession, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT `+sessionColumns+` FROM audio_sessions WHERE status = ? ORDER BY created_at ASC LIMIT ?`,
-		model.StatusPending, limit)
+		`SELECT `+sessionColumns+` FROM audio_sessions WHERE status IN (?, ?) ORDER BY created_at ASC LIMIT ?`,
+		model.StatusPending, model.StatusProcessing, limit)
 	if err != nil {
 		return nil, err
 	}

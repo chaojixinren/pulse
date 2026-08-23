@@ -45,9 +45,12 @@ func (h *AudioHandler) Upload(c *gin.Context) {
 
 	recordedAt := time.Now().UTC()
 	if v := c.PostForm("recorded_at"); v != "" {
-		if t, err := time.Parse(time.RFC3339, v); err == nil {
-			recordedAt = t
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			fail(c, apperrors.NewBadRequest("recorded_at 格式无效，应为 RFC3339"))
+			return
 		}
+		recordedAt = t
 	}
 
 	session, err := h.svc.Upload(c.Request.Context(), userID, service.UploadInput{

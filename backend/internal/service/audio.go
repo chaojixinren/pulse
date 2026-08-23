@@ -50,6 +50,22 @@ func extToMime(ext string) string {
 	}
 }
 
+// detectAudioExt 根据文件头魔数识别音频格式，返回 ".wav"/".mp3"/".m4a"，无法识别返回 ""。
+func detectAudioExt(data []byte) string {
+	switch {
+	case len(data) >= 12 && string(data[0:4]) == "RIFF" && string(data[8:12]) == "WAVE":
+		return ".wav"
+	case len(data) >= 3 && string(data[0:3]) == "ID3":
+		return ".mp3"
+	case len(data) >= 2 && data[0] == 0xFF && data[1]&0xE0 == 0xE0:
+		return ".mp3"
+	case len(data) >= 8 && string(data[4:8]) == "ftyp":
+		return ".m4a"
+	default:
+		return ""
+	}
+}
+
 // Upload 校验并直接把音频二进制落库到 audio_sessions。
 func (s *AudioService) Upload(ctx context.Context, userID string, in UploadInput) (*model.AudioSession, error) {
 	if len(in.Data) == 0 {
@@ -62,6 +78,15 @@ func (s *AudioService) Upload(ctx context.Context, userID string, in UploadInput
 	ext := strings.ToLower(filepath.Ext(in.Filename))
 	if !allowedAudioExt[ext] {
 		return nil, apperrors.NewBadRequest("不支持的音频格式，仅支持 WAV/MP3/M4A")
+	}
+
+	// 校验文件内容（魔数），避免仅凭扩展名放行非音频数据。
+	detected := detectAudioExt(in.Data)
+	if detected == "" {
+		return nil, apperrors.NewBadRequest("无法识别的音频文件内容，仅支持 WAV/MP3/M4A")
+	}
+	if detected != ext {
+		return nil, apperrors.NewBadRequest(fmt.Sprintf("文件内容与扩展名不符：内容为 %s，扩展名为 %s", detected, ext))
 	}
 
 	fileSize := int64(len(in.Data))
@@ -116,7 +141,8 @@ func (s *AudioService) Retry(ctx context.Context, userID, id string) error {
 	if session.Status != model.StatusFailed {
 		return apperrors.NewBadRequest("只有失败状态的会话才能重试")
 	}
-	if err := s.sessions.UpdateStatus(ctx, id, model.StatusPending, ""); err != nil {
+	// 重试直接置为 processing，由 worker 认领后重新转写。
+	if err := s.sessions.UpdateStatus(ctx, id, model.StatusProcessing, ""); err != nil {
 		return err
 	}
 	return nil
