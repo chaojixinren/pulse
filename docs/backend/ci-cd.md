@@ -8,7 +8,8 @@ Pulse 后端持续集成（CI）与持续交付（CD）说明。
 |------|----------|------|
 | CI lint | push / PR（`backend/**`） | `gofmt` 检查 + `go vet ./...` + `go vet -tags e2e ./...` |
 | CI test | push / PR | `go test ./... -race`，上传覆盖率产物 |
-| CI e2e | push / PR | 启动 MySQL + Redis 服务，执行迁移后跑真实基础设施 e2e |
+| CI phase2 | push / PR | 运行 Phase 2（AI 分析 + 设备管理）单元/集成测试（`-race`） |
+| CI e2e | push / PR | 启动 MySQL + Redis 服务，执行迁移后跑真实基础设施 e2e（Phase 1 + Phase 2） |
 | CI docker | push / PR | 构建多阶段 Docker 镜像（不推送） |
 | CD release | 推送 `v*` tag | 构建镜像推送到 GHCR，并创建 GitHub Release |
 
