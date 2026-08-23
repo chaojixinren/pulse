@@ -33,9 +33,9 @@ Pulse/
 
 ### 前置要求
 
-- **后端**：Node.js 18+ 或 Python 3.10+
-- **前端**：Flutter 3.0+
-- **硬件**：ESP32-S3 开发板、Arduino IDE 或 PlatformIO
+- **后端**：Go 1.21+
+- **前端**：Node.js 18+
+- **硬件**：待定
 
 ### 安装步骤
 

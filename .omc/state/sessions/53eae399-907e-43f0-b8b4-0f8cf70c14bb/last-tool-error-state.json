@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"tree -L 3 -I 'node_modules|.git' --dirsfirst\",\"description\":\"Generate project tree structure\"}",
-  "error": "Exit code 127\n(eval):1: command not found: tree",
-  "timestamp": "2026-08-23T08:30:33.940Z",
-  "retry_count": 1
-}

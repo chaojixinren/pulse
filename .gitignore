@@ -6,6 +6,9 @@
 *.swo
 *~
 
+# OMC (oh-my-claudecode)
+.omc/
+
 # Logs
 logs/
 *.log
