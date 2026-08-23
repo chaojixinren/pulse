@@ -178,24 +178,28 @@ internal/middleware/trace.go  # request_id 透传
 用 docker-compose 一键启动依赖与服务，配置 CI/CD。
 
 ### docker-compose 服务
+
+已实现于仓库根目录 `docker-compose.yml`：
+
 ```yaml
 services:
-  backend:   # 构建 Go 镜像，暴露 8080
-  mysql:     # mysql:8.0
-  redis:     # redis:7-alpine
+  mysql:     # mysql:8.0，健康检查 mysqladmin ping
+  redis:     # redis:7-alpine，健康检查 redis-cli ping
+  migrate:   # 一次性执行 pulse-migrate（等待 MySQL 就绪）
+  backend:   # 多阶段构建 Go 镜像，暴露 8080，healthcheck 调 /health
 ```
 
 ### 要点
-- 多阶段 Docker 构建（golang 编译 → 精简运行镜像）。
+- 多阶段 Docker 构建（golang 编译 → 精简运行镜像，见 `backend/Dockerfile`）。
 - 环境变量区分 dev/prod（`.env` 注入，密钥走 secret 管理）。
-- 健康检查：容器 healthcheck 调 `/health`。
-- CI：代码 lint → 单测 → 构建镜像 → 推仓库。
-- CD：灰度发布策略（先 1 实例，观察指标再扩）。
+- 健康检查：容器 healthcheck 调 `/health`（200 健康 / 503 依赖不可用）。
+- CI：`gofmt` + `go vet` → 单测（`-race`）→ 真实 MySQL/Redis e2e → 构建镜像（见 `.github/workflows/ci.yml`）。
+- CD：推送 `v*` tag 构建镜像到 GHCR 并创建 Release（见 `.github/workflows/release.yml`）。
 
 ### 验收标准
-- [ ] `docker compose up` 可拉起完整环境。
-- [ ] CI 在 PR 上跑 lint + test，失败阻断合并。
-- [ ] 发布有回滚方案。
+- [x] `docker compose up` 可拉起完整环境。
+- [x] CI 在 PR 上跑 lint + test，失败阻断合并。
+- [x] 发布有回滚方案（镜像按语义版本打 tag，可回滚到上一版本）。
 
 ---
 
@@ -206,7 +210,7 @@ services:
 - [ ] 支持数据删除与导出，注销流程完整。
 - [ ] 登录/上传有限流与配额。
 - [ ] 日志可链路追踪，指标可采集，告警就位。
-- [ ] docker-compose 部署 + CI/CD 跑通。
+- [x] docker-compose 部署 + CI/CD 跑通。
 
 ## 上线前安全检查（Checklist）
 

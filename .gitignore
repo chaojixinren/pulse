@@ -100,6 +100,7 @@ docs/.doctrees/
 
 # Testing
 coverage/
+coverage.out
 .nyc_output/
 *.cover
 .coverage
@@ -153,6 +154,9 @@ $RECYCLE.BIN/
 .go-build-cache/
 .gopath/
 .gocache/
+
+# 本地临时工具
+.tools/
 
 # Go compiled binaries
 backend/pulse-backend

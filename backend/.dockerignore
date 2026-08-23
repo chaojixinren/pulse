@@ -1,0 +1,24 @@
+.git
+.gitignore
+
+# Go 构建/模块缓存
+.gocache/
+.gomodcache/
+.gopath/
+.go-build-cache/
+.go/
+
+# 本地产物
+*.out
+coverage.out
+pulse-backend
+server
+migrate
+
+# 环境与密钥
+.env
+.env.*
+
+# 文档与测试源码（运行时镜像不需要）
+*.md
+**/*_test.go

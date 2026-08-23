@@ -145,9 +145,31 @@ golangci-lint run
 go run cmd/migrate/main.go
 ```
 
-## 部署
+## 部署与 CI/CD
 
-详见 [部署指南](../docs/deployment.md)。
+### Docker Compose 一键启动
+
+```bash
+docker compose up -d --build
+```
+
+会拉起 MySQL + Redis + 迁移 + 后端服务，详见 [CI/CD 说明](../docs/backend/ci-cd.md)。
+
+### 常用命令
+
+```bash
+make build        # 编译
+make test         # 单元/集成测试
+make test-e2e     # 真实 MySQL/Redis e2e
+make docker-up    # 启动全栈
+```
+
+### CI/CD
+
+- CI：`.github/workflows/ci.yml`（gofmt + go vet + 单测/竞态 + 真实 MySQL/Redis e2e + 镜像构建）
+- CD：`.github/workflows/release.yml`（打 `v*` tag 推送镜像到 GHCR 并创建 Release）
+
+详见 [docs/backend/ci-cd.md](../docs/backend/ci-cd.md)。
 
 ## 许可证
 
