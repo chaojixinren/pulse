@@ -254,7 +254,7 @@ func (s *SttService) Transcribe(ctx, audioURL string) (text string, err error)
 
 ### 处理流程（异步 worker）
 ```
-1. 定时/轮询取 status=pending 的会话（Phase 1 可简单轮询 DB，Phase 2 换 Redis 队列）
+1. 定时/轮询取 status=pending 的会话（单 worker 轮询 DB）
 2. 置 status=processing
 3. 调 stt.Transcribe(audio_url)
 4. 成功：写 transcript，置 completed；失败：置 failed + error_message
@@ -262,7 +262,7 @@ func (s *SttService) Transcribe(ctx, audioURL string) (text string, err error)
 ```
 
 ### 注意
-- Phase 1 为跑通闭环，可接受**简单轮询 + 单 worker**；并发与队列在 Phase 2 强化。
+- Phase 1 为跑通闭环，采用**简单轮询 + 单 worker** 即可。
 - STT 调用要设超时，失败要可重试（指数退避）。
 
 ### 验收标准

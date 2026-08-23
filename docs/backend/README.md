@@ -9,7 +9,7 @@
 - **AI SDK**：adk-go + eino
 - **STT**：StepFun StepAudio-2.5-ASR
 - **数据库**：MySQL 8.0+（主数据）
-- **缓存**：Redis 7+（会话、热点数据、异步队列）
+- **缓存**：Redis 7+（会话、热点数据）
 - **对象存储**：七牛云（语音文件）
 - **认证**：JWT
 
@@ -18,7 +18,7 @@
 | 阶段 | 目标 | 核心模块 | 完成标志 |
 |------|------|----------|----------|
 | [Phase 1：MVP](phase-1-mvp.md) | 跑通「上传音频 → 转写 → 查看」最小闭环 | 骨架、认证、音频上传、七牛云存储、语音会话、STT 转写、身份、时间线、日报 | 硬件上传的音频能被转写并在前端时间线查看 |
-| [Phase 2：AI 增强](phase-2-ai.md) | 从转写文本提取结构化信息并推送提醒 | AI 分析（身份识别/信息提取）、异步处理管道、设备管理、提醒中心、WebSocket 通知 | 系统能自动识别身份、提取待办/承诺并提醒 |
+| [Phase 2：AI 增强](phase-2-ai.md) | 从转写文本提取结构化信息并推送提醒 | AI 分析（身份识别/信息提取）、设备管理、提醒中心 | 系统能自动识别身份、提取待办/承诺并提醒 |
 | [Phase 3：生产化](phase-3-production.md) | 达到可上线标准 | 报告增强、加密存储、数据删除/导出、限流配额、可观测性、部署 | 通过安全检查，可灰度上线 |
 
 ## 后端目录结构（目标态）
@@ -68,7 +68,7 @@ backend/
 │   │   ├── logger.go
 │   │   ├── cors.go
 │   │   └── ratelimit.go         # Phase 3
-│   ├── worker/                  # 异步处理
+│   ├── worker/                  # 后台处理
 │   │   └── audio_processor.go
 │   └── config/
 │       └── config.go            # 配置加载
@@ -85,7 +85,7 @@ backend/
 ```
 
 > 说明：现有仓库的 `internal/` 只有 api/config/middleware/model/service 五个空目录。
-> 本文档建议新增 `repository`（数据访问层）与 `worker`（异步处理）两个目录，实现更清晰的分层。
+> 本文档建议新增 `repository`（数据访问层）与 `worker`（后台处理）两个目录，实现更清晰的分层。
 
 ## 分层约定
 
@@ -96,7 +96,7 @@ HTTP 请求 → api(handler) → service(业务逻辑) → repository(数据访�
                                   ├→ stt(StepFun)
                                   └→ ai(adk-go + eino)
 
-异步任务 → worker → service → ...
+后台任务 → worker → service → ...
 ```
 
 - **api 层**：只做参数解析、校验、调用 service、返回统一响应；不写业务逻辑。
@@ -145,10 +145,8 @@ type Response struct {
 | 时间线 | 1 | api/timeline、service/timeline | 会话、身份 |
 | 日报 | 1 | api/report、service/report | 时间线 |
 | AI 分析 | 2 | service/ai（adk-go + eino） | STT、身份 |
-| 异步处理管道 | 2 | worker、Redis 队列 | 会话 |
 | 设备管理 | 2 | api/device、service/device、model/device | 认证 |
 | 提醒中心 | 2 | api/reminder、service/reminder、model/reminder | AI 分析 |
-| WebSocket 通知 | 2 | api/ws | 异步管道 |
 | 报告增强 | 3 | service/report | 时间线、AI |
 | 加密存储 | 3 | service/storage | 存储 |
 | 数据删除/导出 | 3 | api/export、service/export | 各模块 |
@@ -162,7 +160,7 @@ type Response struct {
 
 1. Phase 1 先搭骨架 + 认证，因为所有后续接口都依赖 JWT 中间件。
 2. Phase 1 的音频上传 → 存储 → 会话 → STT → 时间线 是一条强依赖链，按此顺序开发。
-3. Phase 2 的 AI 分析依赖 Phase 1 的 STT 与身份，异步管道依赖会话状态机。
+3. Phase 2 的 AI 分析依赖 Phase 1 的 STT 与身份，提醒中心依赖 AI 分析。
 4. Phase 3 可并行推进：加密存储、限流、可观测性相互独立。
 
 ## 相关文档

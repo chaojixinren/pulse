@@ -7,13 +7,11 @@
 
 ```
 [1 AI 分析] ← 依赖 Phase1 的 STT + 身份
-[2 异步处理管道] ← 依赖 Phase1 会话状态机
-[3 设备管理] ← 独立，依赖认证
-[4 提醒中心] ← 依赖 AI 分析
-[5 WebSocket 通知] ← 依赖异步管道
+[2 设备管理] ← 独立，依赖认证
+[3 提醒中心] ← 依赖 AI 分析
 ```
 
-建议顺序：先 2（管道强化）→ 1（AI 分析）→ 4（提醒）→ 3（设备）→ 5（通知）。设备管理较独立可并行。
+建议顺序：先 1（AI 分析）→ 3（提醒）→ 2（设备）。设备管理较独立可并行。
 
 ---
 
@@ -90,49 +88,7 @@ func (s *AIService) Analyze(ctx, transcript string, identities []model.Identity)
 
 ---
 
-## 模块 2：异步处理管道（Redis 队列）
-
-### 职责
-把 Phase 1 的「轮询 DB 单 worker」升级为基于 Redis 的可靠队列，支持并发、重试、失败隔离，支撑 STT + AI 两步流水线。
-
-### 目录 / 文件
-```
-internal/worker/audio_processor.go   # 消费队列，执行 STT → AI 分析 → 回写
-internal/worker/queue.go             # Redis 队列封装（push/pop/ack/retry）
-```
-
-### 队列设计
-```
-上传成功 → push "audio:pending" 队列
-worker 消费：
-  1. STT 转写（失败 → push "audio:dead"，重试 N 次）
-  2. AI 分析（失败 → 只丢 transcript 不丢分析，单独重试）
-  3. 回写 audio_session，更新 status
-```
-
-### 队列接口签名
-```go
-type Queue interface {
-    Push(ctx, queue string, payload []byte) error
-    Pop(ctx, queue string, timeout time.Duration) (payload []byte, err error)
-    Retry(ctx, queue string, payload []byte, delay time.Duration) error
-    Dead(ctx, queue string, payload []byte) error
-}
-```
-
-### 幂等与重试
-- payload 只放 `session_id`，处理前先读库确认状态，避免重复处理。
-- 指数退避：第 1 次失败延迟 5s，之后 ×2，最多重试 3 次，仍失败进 dead 队列并标记 failed。
-- STT 成功但 AI 失败时，保留 transcript，只重试 AI 阶段（分阶段状态）。
-
-### 验收标准
-- [ ] 多 worker 并发消费，无重复转写同一会话。
-- [ ] 单条失败不影响后续任务（失败隔离）。
-- [ ] 失败任务可按延迟重试，重试次数用尽进 dead 队列。
-
----
-
-## 模块 3：设备管理
+## 模块 2：设备管理
 
 ### 职责
 硬件设备的注册、绑定、状态上报、心跳、远程控制指令下发。
@@ -183,7 +139,7 @@ internal/model/device.go
 
 ---
 
-## 模块 4：提醒中心
+## 模块 3：提醒中心
 
 ### 职责
 基于 AI 提取的待办/承诺，生成提醒；身份切换时提示「上次未完成事项」。
@@ -230,45 +186,8 @@ internal/model/reminder.go
 
 ---
 
-## 模块 5：WebSocket 通知
-
-### 职责
-语音处理完成（或失败）后，实时推送给前端，替代轮询。
-
-### 目录 / 文件
-```
-internal/api/ws.go    # WebSocket 连接管理 + 消息推送
-```
-
-### 消息协议
-```json
-// 服务端 → 客户端
-{
-  "type": "session.completed",
-  "data": { "session_id": "xxx", "status": "completed", "transcript": "..." }
-}
-{
-  "type": "session.failed",
-  "data": { "session_id": "xxx", "error": "..." }
-}
-```
-
-### 要点
-- 连接建立时做 JWT 鉴权（query 参数或首条消息带 token）。
-- 每个用户一个连接，维护 `user_id → conn` 映射。
-- worker 处理完成后发消息；客户端断线期间完成的任务，客户端重连后仍可通过时间线查询兜底。
-
-### 验收标准
-- [ ] 上传音频后，转写完成时前端收到推送。
-- [ ] 未鉴权连接被拒绝。
-- [ ] 断线重连后可正常收到后续通知。
-
----
-
 ## Phase 2 整体验收清单
 
 - [ ] AI 能识别身份并提取待办/承诺，低置信度降级不误绑。
-- [ ] 异步管道支持并发与重试，无重复处理。
 - [ ] 设备可绑定、心跳、解绑。
 - [ ] 待办/承诺自动生成提醒，身份切换有提醒。
-- [ ] 处理完成通过 WebSocket 实时推送前端。
