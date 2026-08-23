@@ -162,3 +162,12 @@ $RECYCLE.BIN/
 backend/pulse-backend
 backend/server
 backend/migrate
+
+# Go test artifacts
+*.test
+*.out
+test_*.wav
+test_*.pcm
+
+# Go race detector cache
+.gocache-race/
