@@ -13,11 +13,6 @@ import (
 	"github.com/chaojixinren/pulse/pkg/utils"
 )
 
-const (
-	accessTokenTTL  = 1 * time.Hour
-	refreshTokenTTL = 7 * 24 * time.Hour
-)
-
 type AuthService struct {
 	cfg    *config.Config
 	users  *repository.UserRepo
@@ -103,7 +98,7 @@ func (s *AuthService) GetUser(ctx context.Context, userID string) (*model.User, 
 }
 
 func (s *AuthService) issueTokens(ctx context.Context, userID string) (*model.TokenPair, error) {
-	access, err := utils.GenerateAccessToken(userID, s.cfg.JWTSecret, accessTokenTTL)
+	access, err := utils.GenerateAccessToken(userID, s.cfg.JWTSecret, s.cfg.JWTExpiresIn)
 	if err != nil {
 		return nil, apperrors.WrapInternal(err)
 	}
@@ -115,7 +110,7 @@ func (s *AuthService) issueTokens(ctx context.Context, userID string) (*model.To
 		ID:        utils.NewUUID(),
 		UserID:    userID,
 		TokenHash: utils.SHA256Hex(refresh),
-		ExpiresAt: time.Now().UTC().Add(refreshTokenTTL),
+		ExpiresAt: time.Now().UTC().Add(s.cfg.RefreshTokenTTL),
 	}
 	if err := s.tokens.Create(ctx, record); err != nil {
 		return nil, apperrors.WrapInternal(err)

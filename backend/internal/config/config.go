@@ -21,8 +21,9 @@ type Config struct {
 	StepFunBaseURL  string
 	StepFunSTTModel string
 
-	JWTSecret    string
-	JWTExpiresIn time.Duration
+	JWTSecret       string
+	JWTExpiresIn    time.Duration
+	RefreshTokenTTL time.Duration
 
 	AllowedOrigins []string
 	LogLevel       string
@@ -39,9 +40,14 @@ func Load() (*Config, error) {
 		}
 	}
 
-	expires, err := time.ParseDuration(getEnv("JWT_EXPIRES_IN", "168h"))
+	expires, err := time.ParseDuration(getEnv("JWT_EXPIRES_IN", "1h"))
 	if err != nil {
 		return nil, fmt.Errorf("JWT_EXPIRES_IN 配置无效: %w", err)
+	}
+
+	refreshTTL, err := time.ParseDuration(getEnv("REFRESH_TOKEN_TTL", "168h"))
+	if err != nil {
+		return nil, fmt.Errorf("REFRESH_TOKEN_TTL 配置无效: %w", err)
 	}
 
 	maxAudioSize, err := strconv.ParseInt(getEnv("MAX_AUDIO_SIZE", "52428800"), 10, 64)
@@ -64,6 +70,7 @@ func Load() (*Config, error) {
 		StepFunSTTModel:    getEnv("STEPFUN_STT_MODEL", "stepaudio-2.5-asr"),
 		JWTSecret:          os.Getenv("JWT_SECRET"),
 		JWTExpiresIn:       expires,
+		RefreshTokenTTL:    refreshTTL,
 		AllowedOrigins:     splitCSV(os.Getenv("ALLOWED_ORIGINS")),
 		LogLevel:           getEnv("LOG_LEVEL", "info"),
 		MaxAudioSize:       maxAudioSize,
