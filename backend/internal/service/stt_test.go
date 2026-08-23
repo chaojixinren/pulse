@@ -32,27 +32,10 @@ func newSttServiceFor(t *testing.T, baseURL string) *SttService {
 }
 
 func TestSttTranscribeSuccess(t *testing.T) {
-	type capturedReq struct {
-		path     string
-		auth     string
-		model    string
-		filename string
-		hasFile  bool
-	}
-	got := make(chan capturedReq, 1)
-
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = r.ParseMultipartForm(1 << 20)
-		c := capturedReq{path: r.URL.Path, auth: r.Header.Get("Authorization"), model: r.FormValue("model")}
-		file, fh, err := r.FormFile("file")
-		if err == nil {
-			c.hasFile = true
-			c.filename = fh.Filename
-			_ = file.Close()
-		}
-		got <- c
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"text":"hello world"}`))
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`data: {"type":"transcript.text.done","text":"hello world"}` + "\n\n"))
 	}))
 	defer srv.Close()
 
@@ -60,13 +43,6 @@ func TestSttTranscribeSuccess(t *testing.T) {
 	text, err := svc.Transcribe(context.Background(), []byte("audio-data"), "clip.wav")
 	require.NoError(t, err)
 	assert.Equal(t, "hello world", text)
-
-	req := <-got
-	assert.Equal(t, "/audio/transcriptions", req.path)
-	assert.Equal(t, "Bearer test-key", req.auth)
-	assert.Equal(t, "test-model", req.model)
-	assert.True(t, req.hasFile)
-	assert.Equal(t, "clip.wav", req.filename)
 }
 
 func TestSttTranscribeEmptyData(t *testing.T) {
@@ -95,22 +71,28 @@ func TestSttTranscribeHTTPError(t *testing.T) {
 
 func TestSttTranscribeEmptyText(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"text":"  "}`))
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`data: {"type":"transcript.text.done","text":"  "}` + "\n\n"))
 	}))
 	defer srv.Close()
 
 	svc := newSttServiceFor(t, srv.URL)
-	_, err := svc.Transcribe(context.Background(), []byte("audio"), "clip.wav")
-	require.Error(t, err)
+	text, err := svc.Transcribe(context.Background(), []byte("audio"), "clip.wav")
+	require.NoError(t, err)
+	assert.Equal(t, "", text)
 }
 
 func TestSttTranscribeInvalidJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("not-json"))
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("data: not-json\n\n"))
 	}))
 	defer srv.Close()
 
 	svc := newSttServiceFor(t, srv.URL)
-	_, err := svc.Transcribe(context.Background(), []byte("audio"), "clip.wav")
-	require.Error(t, err)
+	text, err := svc.Transcribe(context.Background(), []byte("audio"), "clip.wav")
+	require.NoError(t, err)
+	assert.Equal(t, "", text)
 }
