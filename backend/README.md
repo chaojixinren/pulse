@@ -4,7 +4,7 @@
 
 ## 技术栈
 
-- **语言**：Go 1.21+
+- **语言**：Go 1.26.5
 - **框架**：Gin
 - **AI SDK**：OpenAI 兼容 chat/completions（net/http）
 - **STT 服务**：StepFun StepAudio-2.5-ASR
@@ -17,29 +17,23 @@
 ```
 backend/
 ├── cmd/
-│   └── server/
-│       └── main.go       # 应用入口
+│   ├── server/           # 应用入口
+│   └── migrate/          # 数据库迁移命令
 ├── internal/
-│   ├── api/              # API 路由
-│   │   ├── auth.go       # 用户认证
-│   │   ├── audio.go      # 语音上传
-│   │   ├── identity.go   # 身份管理
-│   │   └── report.go     # 报告生成
-│   ├── service/          # 业务逻辑
-│   │   ├── ai.go         # AI 分析服务 (chat/completions)
-│   │   └── stt.go        # STT 转写
-│   ├── model/            # 数据模型
-│   │   ├── user.go
-│   │   ├── identity.go
-│   │   └── audio_session.go
-│   ├── middleware/       # 中间件
-│   └── config/           # 配置文件
-├── pkg/                  # 公共包
-│   └── utils/            # 工具函数
-├── migrations/           # 数据库迁移
+│   ├── api/              # HTTP 处理器与路由（auth/audio/identity/timeline/report/device）
+│   ├── service/          # 业务逻辑（auth/audio/stt/ai/identity/timeline/report/device）
+│   ├── repository/       # 数据访问层（user/refresh_token/identity/audio_session/device）
+│   ├── model/            # 数据模型（user/refresh_token/identity/audio_session/device/extraction）
+│   ├── middleware/       # 中间件（auth/logger/cors/error_handler）
+│   ├── worker/           # 后台处理（转写 → AI 分析流水线）
+│   └── config/           # 配置加载（config/database/redis）
+├── pkg/                  # 公共包（errors/logger/prompt/response/utils）
+├── test/                 # 真实基础设施 e2e（-tags e2e）
+├── migrations/           # SQL 迁移（001_init.sql、002_phase2.sql）
+├── Dockerfile
 ├── .env.example          # 环境变量模板
 ├── go.mod                # Go 模块依赖
-└── README.md            # 本文件
+└── README.md             # 本文件
 ```
 
 ## 快速开始
@@ -69,24 +63,46 @@ REDIS_URL=redis://localhost:6379
 
 # AI 服务 (chat/completions)
 AI_API_KEY=your_ai_api_key
-AI_BASE_URL=https://api.example.com
+AI_BASE_URL=https://api.openai.com/v1
+AI_MODEL=gpt-4o-mini
+# 身份识别置信度阈值（低于该值不自动绑定身份）
+AI_CONFIDENCE_THRESHOLD=0.6
+
+# STT 服务 (StepFun StepAudio-2.5-ASR)
+STEPFUN_API_KEY=your_stepfun_api_key
+STEPFUN_STT_MODEL=stepaudio-2.5-asr
+STEPFUN_API_BASE=https://api.stepfun.com/v1
 
 # JWT 密钥
-JWT_SECRET=your_secret_key
+JWT_SECRET=your_random_secret_key_change_in_production
+# access token 有效期（JWT）
+JWT_EXPIRES_IN=1h
+# refresh token 有效期
+REFRESH_TOKEN_TTL=168h
+
+# CORS 配置
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+
+# 日志级别
+LOG_LEVEL=info
+
+# 语音处理配置
+MAX_AUDIO_SIZE=52428800
+AUDIO_RETENTION_DAYS=30
 ```
 
 ### 3. 初始化数据库
 
 ```bash
 # 运行迁移
-go run cmd/migrate/main.go
+go run ./cmd/migrate
 ```
 
 ### 4. 启动服务
 
 ```bash
 # 开发模式
-go run cmd/server/main.go
+go run ./cmd/server
 
 # 或使用 air 热重载
 air
@@ -96,39 +112,58 @@ air
 
 ## API 端点
 
+### 健康检查
+
+- `GET /health` - 健康检查（MySQL / Redis 可用性）
+
 ### 认证
 
-- `POST /api/auth/register` - 用户注册
-- `POST /api/auth/login` - 用户登录
-- `POST /api/auth/refresh` - 刷新 token
+- `POST /api/v1/auth/register` - 用户注册
+- `POST /api/v1/auth/login` - 用户登录
+- `POST /api/v1/auth/refresh` - 刷新 token
+- `POST /api/v1/auth/logout` - 登出
+- `GET /api/v1/auth/me` - 当前用户信息
 
 ### 语音处理
 
-- `POST /api/audio/upload` - 上传语音文件
-- `GET /api/audio/:id` - 获取语音记录
-- `GET /api/audio/sessions` - 获取语音会话列表
+- `POST /api/v1/audio/upload` - 上传语音文件
+- `POST /api/v1/audio/:id/retry` - 重试转写
 
 ### 身份管理
 
-- `GET /api/identities` - 获取用户的所有身份
-- `POST /api/identities` - 创建新身份
-- `PUT /api/identities/:id` - 更新身份
-- `DELETE /api/identities/:id` - 删除身份
+- `GET /api/v1/identities` - 获取用户的所有身份
+- `POST /api/v1/identities` - 创建新身份
+- `PUT /api/v1/identities/:id` - 更新身份
+- `DELETE /api/v1/identities/:id` - 删除身份
+- `PUT /api/v1/identities/:id/default` - 设为默认身份
 
-### 报告生成
+### 时间线
 
-- `GET /api/reports/daily/:date` - 获取日报
-- `GET /api/reports/weekly/:date` - 获取周报
-- `GET /api/reports/stats` - 获取统计数据
+- `GET /api/v1/timeline` - 按身份查看语音会话时间线
 
-完整 API 文档请查看 [API Documentation](../docs/api.md)。
+### 报告
+
+- `GET /api/v1/reports/daily` - 获取日报
+
+### 设备管理（Phase 2）
+
+- `POST /api/v1/devices/bind-code` - 生成设备绑定码
+- `POST /api/v1/devices/bind` - 绑定设备
+- `GET /api/v1/devices` - 设备列表
+- `GET /api/v1/devices/:id` - 设备详情
+- `DELETE /api/v1/devices/:id` - 解绑设备
+- `POST /api/v1/devices/:id/heartbeat` - 设备心跳
+- `POST /api/v1/devices/:id/command` - 下发指令
+
+详细接口约定见 [后端设计](../docs/backend-design.md) 与 [分阶段开发文档](../docs/backend/README.md)。
 
 ## 开发
 
 ### 运行测试
 
 ```bash
-go test ./...
+go test ./... -race        # 单元 + 集成测试（sqlmock，无需外部依赖）
+go test -tags e2e ./test/  # 真实 MySQL/Redis e2e
 ```
 
 ### 代码检查
@@ -142,7 +177,7 @@ golangci-lint run
 
 ```bash
 # 运行数据库迁移
-go run cmd/migrate/main.go
+go run ./cmd/migrate
 ```
 
 ## 部署与 CI/CD
@@ -166,7 +201,7 @@ make docker-up    # 启动全栈
 
 ### CI/CD
 
-- CI：`.github/workflows/ci.yml`（gofmt + go vet + 单测/竞态 + 真实 MySQL/Redis e2e + 镜像构建）
+- CI：`.github/workflows/ci.yml`（gofmt + go vet + 单测/竞态 + Phase 1/Phase 2 真实 MySQL/Redis e2e 矩阵 + 镜像构建）
 - CD：`.github/workflows/release.yml`（打 `v*` tag 推送镜像到 GHCR 并创建 Release）
 
 详见 [docs/backend/ci-cd.md](../docs/backend/ci-cd.md)。

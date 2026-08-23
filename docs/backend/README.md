@@ -5,7 +5,7 @@
 
 ## 技术栈（已确定）
 
-- **语言/框架**：Go 1.21+ / Gin
+- **语言/框架**：Go 1.26.5 / Gin
 - **AI SDK**：OpenAI 兼容 chat/completions（net/http）
 - **STT**：StepFun StepAudio-2.5-ASR
 - **数据库**：MySQL 8.0+（主数据）
@@ -21,74 +21,89 @@
 | [Phase 2：AI 增强](phase-2-ai.md) | 从转写文本提取结构化信息 | AI 分析（身份识别/信息提取）、设备管理 | 系统能自动识别身份、提取待办/承诺 |
 | [Phase 3：生产化](phase-3-production.md) | 达到可上线标准 | 报告增强、加密存储、数据删除/导出、限流配额、可观测性、部署 | 通过安全检查，可灰度上线 |
 
-## 后端目录结构（目标态）
+## 后端目录结构（当前实现）
 
 ```
 backend/
 ├── cmd/
-│   └── server/
-│       └── main.go              # 入口：加载配置、初始化依赖、启动 HTTP
+│   ├── server/
+│   │   └── main.go              # 入口：加载配置、初始化依赖、启动 HTTP
+│   └── migrate/
+│       └── main.go              # 数据库迁移（执行 migrations/*.sql）
 ├── internal/
 │   ├── api/                     # HTTP 处理器（按资源拆分）
 │   │   ├── router.go            # 路由注册
 │   │   ├── handler.go           # 统一响应 / 错误处理
+│   │   ├── health.go            # 健康检查
 │   │   ├── auth.go
 │   │   ├── audio.go
 │   │   ├── identity.go
 │   │   ├── timeline.go
-│   │   ├── device.go            # Phase 2
-│   │   └── report.go
+│   │   ├── device.go            # Phase 2：设备管理
+│   │   ├── report.go
+│   │   ├── e2e_test.go          # 接口 e2e（sqlmock）
+│   │   └── e2e_phase2_test.go   # Phase 2 接口 e2e
 │   ├── service/                 # 业务逻辑层
 │   │   ├── auth.go
 │   │   ├── audio.go
 │   │   ├── stt.go               # StepFun STT 封装
-│   │   ├── ai.go                # chat/completions 编排
+│   │   ├── ai.go                # Phase 2：AI 分析（chat/completions 编排）
 │   │   ├── identity.go
 │   │   ├── timeline.go
 │   │   ├── report.go
-│   │   └── device.go            # Phase 2
+│   │   └── device.go            # Phase 2：设备管理
 │   ├── repository/              # 数据访问层（与 service 分离）
 │   │   ├── user.go
+│   │   ├── refresh_token.go
 │   │   ├── identity.go
 │   │   ├── audio_session.go
-│   │   └── device.go
+│   │   └── device.go            # Phase 2
 │   ├── model/                   # 数据模型 struct
 │   │   ├── user.go
+│   │   ├── refresh_token.go
 │   │   ├── identity.go
 │   │   ├── audio_session.go
-│   │   ├── device.go
-│   │   └── refresh_token.go
+│   │   ├── device.go            # Phase 2
+│   │   └── extraction.go        # Phase 2：AI 提取结果（待办/承诺/笔记）
 │   ├── middleware/              # 中间件
 │   │   ├── auth.go              # JWT 认证
 │   │   ├── logger.go
 │   │   ├── cors.go
-│   │   └── ratelimit.go         # Phase 3
+│   │   └── error_handler.go
 │   ├── worker/                  # 后台处理
-│   │   └── audio_processor.go
+│   │   └── audio_processor.go   # 转写 → AI 分析流水线
 │   └── config/
-│       └── config.go            # 配置加载
+│       ├── config.go            # 配置加载
+│       ├── database.go          # MySQL 连接
+│       └── redis.go             # Redis 连接
 ├── pkg/
+│   ├── errors/                  # 自定义错误类型
 │   ├── logger/                  # zap 封装
+│   ├── prompt/                  # AI 提示词模板
 │   ├── response/                # 统一 JSON 响应
-│   └── utils/
+│   └── utils/                   # uuid / hash / random / jwt 等工具
+├── test/                        # 真实基础设施 e2e（-tags e2e）
+│   ├── e2e_live_test.go         # Phase 1 全链路
+│   └── e2e_live_phase2_test.go  # Phase 2 设备管理
 ├── migrations/                  # SQL 迁移文件
 │   ├── 001_init.sql
-│   └── ...
+│   └── 002_phase2.sql
+├── Dockerfile
 ├── .env.example
 ├── go.mod
 └── README.md
 ```
 
-> 说明：现有仓库的 `internal/` 只有 api/config/middleware/model/service 五个空目录。
-> 本文档建议新增 `repository`（数据访问层）与 `worker`（后台处理）两个目录，实现更清晰的分层。
+> 说明：Phase 1 与 Phase 2 已按上表落地；各目录内 `_test.go` 为对应单元/集成测试（与源文件同目录）。
+> Phase 3 规划的 `middleware/ratelimit`、`api/export`、加密存储与可观测性模块尚未实现，详见 [Phase 3：生产化](phase-3-production.md)。
 
 ## 分层约定
 
 ```
 HTTP 请求 → api(handler) → service(业务逻辑) → repository(数据访问) → MySQL
-                                  │
-                                  ├→ stt(StepFun)
-                                  └→ ai(chat/completions)
+                                   │
+                                   ├→ stt(StepFun)
+                                   └→ ai(chat/completions)
 
 后台任务 → worker → service → ...
 ```
@@ -138,14 +153,23 @@ type Response struct {
 | 身份管理 | 1 | api/identity、service/identity、model/identity | 认证 |
 | 时间线 | 1 | api/timeline、service/timeline | 会话、身份 |
 | 日报 | 1 | api/report、service/report | 时间线 |
-| AI 分析 | 2 | service/ai（chat/completions） | STT、身份 |
-| 设备管理 | 2 | api/device、service/device、model/device | 认证 |
+| AI 分析 | 2 | service/ai、model/extraction | STT、身份 |
+| 设备管理 | 2 | api/device、service/device、repository/device、model/device | 认证 |
 | 报告增强 | 3 | service/report | 时间线、AI |
 | 加密存储 | 3 | service/audio | 存储 |
 | 数据删除/导出 | 3 | api/export、service/export | 各模块 |
 | 限流配额 | 3 | middleware/ratelimit | 认证 |
 | 可观测性 | 3 | pkg/logger、middleware | 骨架 |
 | 部署 | 3 | docker-compose、CI | 全部 |
+
+## 测试与 CI
+
+| 类型 | 命令 | 依赖 |
+|------|------|------|
+| 单元 + 集成 | `go test ./... -race` | 无（sqlmock） |
+| 真实 e2e | `go test -tags e2e ./test/` | MySQL + Redis（设置 `TEST_DATABASE_DSN` / `TEST_REDIS_URL`） |
+
+CI 在 push / PR 时执行 `lint` → `test` → `e2e`（Phase 1 / Phase 2 矩阵）→ `docker`，详见 [后端 CI/CD](ci-cd.md)。
 
 ## 开发顺序建议
 
@@ -161,4 +185,6 @@ type Response struct {
 - [Phase 1：MVP 开发文档](phase-1-mvp.md)
 - [Phase 2：AI 增强开发文档](phase-2-ai.md)
 - [Phase 3：生产化开发文档](phase-3-production.md)
+- [后端 CI/CD](ci-cd.md)
 - [后端整体设计](../backend-design.md)
+
