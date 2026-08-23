@@ -35,7 +35,6 @@ var (
 	e2eIdentityCols    = []string{"id", "user_id", "name", "description", "color", "icon", "is_default", "created_at", "updated_at", "deleted_at"}
 	e2eDeviceCols      = []string{"id", "user_id", "device_id", "name", "device_type", "firmware_version", "battery_level", "last_seen_at", "is_active", "device_token_hash", "created_at", "updated_at"}
 	e2eBindCodeCols    = []string{"id", "user_id", "code", "expires_at", "used_at", "created_at"}
-	e2eReminderCols    = []string{"id", "user_id", "session_id", "identity_id", "type", "content", "due_at", "status", "created_at", "updated_at"}
 )
 
 const e2eSecret = "e2e-secret"
@@ -374,32 +373,6 @@ func TestE2EDeviceBindFlow(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	w = perform(router, http.MethodDelete, "/api/v1/devices/"+deviceID, nil, "", token)
-	require.Equal(t, http.StatusOK, w.Code, "响应: %s", w.Body.String())
-
-	assert.NoError(t, mock.ExpectationsWereMet())
-}
-
-func TestE2EReminderListAndDone(t *testing.T) {
-	router, mock, _ := newE2ERouter(t)
-	token := e2eToken(t, "u1")
-	now := time.Now().UTC()
-
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, user_id, session_id")).
-		WithArgs("u1", "pending").
-		WillReturnRows(sqlmock.NewRows(e2eReminderCols).AddRow("r1", "u1", nil, nil, "todo", "买菜", nil, "pending", now, now))
-
-	w := perform(router, http.MethodGet, "/api/v1/reminders", nil, "", token)
-	require.Equal(t, http.StatusOK, w.Code, "响应: %s", w.Body.String())
-	assert.Len(t, decode(t, w)["data"].([]interface{}), 1)
-
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, user_id, session_id")).
-		WithArgs("r1", "u1").
-		WillReturnRows(sqlmock.NewRows(e2eReminderCols).AddRow("r1", "u1", nil, nil, "todo", "买菜", nil, "pending", now, now))
-	mock.ExpectExec(regexp.QuoteMeta("UPDATE reminders SET status")).
-		WithArgs("done", sqlmock.AnyArg(), "r1", "u1", "pending").
-		WillReturnResult(sqlmock.NewResult(0, 1))
-
-	w = perform(router, http.MethodPut, "/api/v1/reminders/r1/done", nil, "", token)
 	require.Equal(t, http.StatusOK, w.Code, "响应: %s", w.Body.String())
 
 	assert.NoError(t, mock.ExpectationsWereMet())

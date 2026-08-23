@@ -16,12 +16,11 @@ import (
 
 	"github.com/chaojixinren/pulse/internal/api"
 	"github.com/chaojixinren/pulse/internal/config"
-	"github.com/chaojixinren/pulse/pkg/utils"
 )
 
-// TestLiveE2EPhase2DevicesAndReminders 覆盖 Phase 2 设备管理 + 提醒中心的真实基础设施端到端流程。
+// TestLiveE2EPhase2Devices 覆盖 Phase 2 设备管理的真实基础设施端到端流程。
 // 运行方式见 e2e_live_test.go；需先执行 migrations 并设置 TEST_DATABASE_DSN / TEST_REDIS_URL。
-func TestLiveE2EPhase2DevicesAndReminders(t *testing.T) {
+func TestLiveE2EPhase2Devices(t *testing.T) {
 	dsn := os.Getenv("TEST_DATABASE_DSN")
 	redisURL := os.Getenv("TEST_REDIS_URL")
 	if dsn == "" || redisURL == "" {
@@ -49,8 +48,6 @@ func TestLiveE2EPhase2DevicesAndReminders(t *testing.T) {
 	// 注册 + 登录
 	resp, reg := c.json(t, http.MethodPost, "/api/v1/auth/register", map[string]string{"email": email, "password": "secret123", "name": "E2E Phase2"})
 	require.Equal(t, http.StatusOK, resp.StatusCode, "register: %v", reg)
-	userID := reg["data"].(map[string]interface{})["id"].(string)
-	require.NotEmpty(t, userID)
 
 	resp, login := c.json(t, http.MethodPost, "/api/v1/auth/login", map[string]string{"email": email, "password": "secret123"})
 	require.Equal(t, http.StatusOK, resp.StatusCode, "login: %v", login)
@@ -87,24 +84,5 @@ func TestLiveE2EPhase2DevicesAndReminders(t *testing.T) {
 
 	// 6) 解绑
 	resp, _ = c.json(t, http.MethodDelete, "/api/v1/devices/"+devID, nil)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-
-	// 7) 提醒：直接插入一条待办，走列表 / 完成
-	reminderID := utils.NewUUID()
-	_, err = db.Exec("INSERT INTO reminders (id, user_id, type, content, status) VALUES (?, ?, 'todo', '买菜', 'pending')", reminderID, userID)
-	require.NoError(t, err)
-
-	resp, rl := c.json(t, http.MethodGet, "/api/v1/reminders", nil)
-	require.Equal(t, http.StatusOK, resp.StatusCode, "reminders: %v", rl)
-	assert.GreaterOrEqual(t, len(rl["data"].([]interface{})), 1)
-
-	resp, _ = c.json(t, http.MethodPut, "/api/v1/reminders/"+reminderID+"/done", nil)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-
-	// 8) 再插入一条走忽略
-	reminderID2 := utils.NewUUID()
-	_, err = db.Exec("INSERT INTO reminders (id, user_id, type, content, status) VALUES (?, ?, 'todo', '交报告', 'pending')", reminderID2, userID)
-	require.NoError(t, err)
-	resp, _ = c.json(t, http.MethodPut, "/api/v1/reminders/"+reminderID2+"/dismiss", nil)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 }

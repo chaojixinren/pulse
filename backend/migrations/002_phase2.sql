@@ -1,4 +1,4 @@
--- Pulse Phase 2 迁移：设备管理 + 提醒中心
+-- Pulse Phase 2 迁移：设备管理
 
 CREATE TABLE IF NOT EXISTS devices (
     id                CHAR(36)     NOT NULL,
@@ -44,23 +44,4 @@ CREATE TABLE IF NOT EXISTS device_commands (
     KEY idx_device_commands_device (device_id, status),
     CONSTRAINT fk_device_commands_device FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE,
     CONSTRAINT fk_device_commands_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS reminders (
-    id          CHAR(36)     NOT NULL,
-    user_id     CHAR(36)     NOT NULL,
-    session_id  CHAR(36)     NULL,
-    identity_id CHAR(36)     NULL,
-    type        VARCHAR(20)  NOT NULL,
-    content     TEXT         NOT NULL,
-    due_at      DATETIME     NULL,
-    status      VARCHAR(20)  NOT NULL DEFAULT 'pending',
-    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    KEY idx_reminders_user_status (user_id, status),
-    KEY idx_reminders_identity (identity_id),
-    CONSTRAINT fk_reminders_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    CONSTRAINT fk_reminders_session FOREIGN KEY (session_id) REFERENCES audio_sessions(id) ON DELETE CASCADE,
-    CONSTRAINT fk_reminders_identity FOREIGN KEY (identity_id) REFERENCES identities(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

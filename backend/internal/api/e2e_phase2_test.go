@@ -88,20 +88,3 @@ func TestE2EDeviceBindInvalidCode(t *testing.T) {
 	assert.Equal(t, float64(40000), decode(t, w)["code"])
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
-
-func TestE2EReminderDismiss(t *testing.T) {
-	router, mock, _ := newE2ERouter(t)
-	token := e2eToken(t, "u1")
-	now := time.Now().UTC()
-
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, user_id, session_id")).
-		WithArgs("r1", "u1").
-		WillReturnRows(sqlmock.NewRows(e2eReminderCols).AddRow("r1", "u1", nil, nil, "todo", "买菜", nil, "pending", now, now))
-	mock.ExpectExec(regexp.QuoteMeta("UPDATE reminders SET status")).
-		WithArgs("dismissed", sqlmock.AnyArg(), "r1", "u1", "pending").
-		WillReturnResult(sqlmock.NewResult(0, 1))
-
-	w := perform(router, http.MethodPut, "/api/v1/reminders/r1/dismiss", nil, "", token)
-	require.Equal(t, http.StatusOK, w.Code, "响应: %s", w.Body.String())
-	assert.NoError(t, mock.ExpectationsWereMet())
-}

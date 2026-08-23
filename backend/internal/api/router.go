@@ -25,7 +25,6 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) (*gin.Engine, 
 	sessionRepo := repository.NewAudioSessionRepo(db)
 	identityRepo := repository.NewIdentityRepo(db)
 	deviceRepo := repository.NewDeviceRepo(db)
-	reminderRepo := repository.NewReminderRepo(db)
 
 	// services
 	authService := service.NewAuthService(cfg, userRepo, tokenRepo)
@@ -36,7 +35,6 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) (*gin.Engine, 
 	reportService := service.NewReportService(sessionRepo, identityRepo)
 	aiService := service.NewAIService(cfg)
 	deviceService := service.NewDeviceService(deviceRepo)
-	reminderService := service.NewReminderService(reminderRepo)
 
 	// handlers
 	healthHandler := NewHealthHandler(db, rdb)
@@ -46,10 +44,9 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) (*gin.Engine, 
 	timelineHandler := NewTimelineHandler(timelineService)
 	reportHandler := NewReportHandler(reportService)
 	deviceHandler := NewDeviceHandler(deviceService)
-	reminderHandler := NewReminderHandler(reminderService)
 
 	// worker
-	processor := worker.NewAudioProcessor(sessionRepo, sttService, rdb, identityRepo, aiService, reminderService)
+	processor := worker.NewAudioProcessor(sessionRepo, sttService, rdb, identityRepo, aiService)
 
 	r.GET("/health", healthHandler.Check)
 
@@ -84,10 +81,6 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) (*gin.Engine, 
 			authed.DELETE("/devices/:id", deviceHandler.Unbind)
 			authed.POST("/devices/:id/heartbeat", deviceHandler.Heartbeat)
 			authed.POST("/devices/:id/command", deviceHandler.Command)
-
-			authed.GET("/reminders", reminderHandler.List)
-			authed.PUT("/reminders/:id/done", reminderHandler.Done)
-			authed.PUT("/reminders/:id/dismiss", reminderHandler.Dismiss)
 		}
 	}
 

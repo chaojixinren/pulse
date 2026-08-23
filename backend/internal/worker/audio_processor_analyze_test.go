@@ -20,10 +20,7 @@ import (
 	"github.com/chaojixinren/pulse/internal/service"
 )
 
-var (
-	workerReminderCols = []string{"id", "user_id", "session_id", "identity_id", "type", "content", "due_at", "status", "created_at", "updated_at"}
-	workerIdentityCols = []string{"id", "user_id", "name", "description", "color", "icon", "is_default", "created_at", "updated_at", "deleted_at"}
-)
+var workerIdentityCols = []string{"id", "user_id", "name", "description", "color", "icon", "is_default", "created_at", "updated_at", "deleted_at"}
 
 // newFakeAI 构建一个可脚本化的 AI 服务：依据系统提示词区分身份识别/信息提取两阶段。
 func newFakeAI(t *testing.T, identityResp, extractResp map[string]interface{}) *service.AIService {
@@ -58,7 +55,7 @@ func newFakeAI(t *testing.T, identityResp, extractResp map[string]interface{}) *
 	})
 }
 
-// TestAudioProcessorAnalyzeFullFlow 集成验收：转写完成 → 拉取候选身份 → AI 两阶段分析 → 回写会话 → 生成 todo 提醒与身份切换提醒。
+// TestAudioProcessorAnalyzeFullFlow 集成验收：转写完成 → 拉取候选身份 → AI 两阶段分析 → 回写会话。
 func TestAudioProcessorAnalyzeFullFlow(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -66,7 +63,6 @@ func TestAudioProcessorAnalyzeFullFlow(t *testing.T) {
 
 	sessions := repository.NewAudioSessionRepo(db)
 	identities := repository.NewIdentityRepo(db)
-	reminders := service.NewReminderService(repository.NewReminderRepo(db))
 	ai := newFakeAI(t,
 		map[string]interface{}{"identity_id": "i2", "confidence": 0.9},
 		map[string]interface{}{
@@ -76,7 +72,7 @@ func TestAudioProcessorAnalyzeFullFlow(t *testing.T) {
 		},
 	)
 
-	w := &AudioProcessor{sessions: sessions, identities: identities, ai: ai, reminders: reminders}
+	w := &AudioProcessor{sessions: sessions, identities: identities, ai: ai}
 	now := time.Now().UTC()
 
 	// 1) 拉取候选身份
@@ -86,12 +82,7 @@ func TestAudioProcessorAnalyzeFullFlow(t *testing.T) {
 			AddRow("i1", "u1", "工作", nil, "#000000", "person", true, now, now, nil).
 			AddRow("i2", "u1", "家庭", nil, "#000000", "person", false, now, now, nil))
 
-	// 2) 上一条身份为 i1 → 与本次 i2 不同，触发身份切换
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT identity_id FROM audio_sessions")).
-		WithArgs("u1", "s1").
-		WillReturnRows(sqlmock.NewRows([]string{"identity_id"}).AddRow("i1"))
-
-	// 3) 回写 AI 分析结果
+	// 2) 回写 AI 分析结果
 	wantExtracted, err := json.Marshal(model.ExtractedData{
 		Todos:       []model.Todo{{Text: "买菜"}},
 		Commitments: []model.Commitment{},
@@ -102,51 +93,31 @@ func TestAudioProcessorAnalyzeFullFlow(t *testing.T) {
 		WithArgs("i2", 0.9, string(wantExtracted), sqlmock.AnyArg(), "s1").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
-	// 4) 生成 todo 提醒
-	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO reminders")).
-		WithArgs(sqlmock.AnyArg(), "u1", "s1", "i2", "todo", "买菜", nil, "pending").
-		WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// 5) 身份切换提醒：查询该身份下未完成待办（空）
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, user_id, session_id")).
-		WithArgs("u1", "i2", "todo", "pending").
-		WillReturnRows(sqlmock.NewRows(workerReminderCols))
-
-	// 6) 写入身份切换提醒
-	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO reminders")).
-		WithArgs(sqlmock.AnyArg(), "u1", "s1", "i2", "identity_switch", "身份已切换，该身份下暂无未完成待办。", nil, "pending").
-		WillReturnResult(sqlmock.NewResult(1, 1))
-
 	sess := &model.AudioSession{ID: "s1", UserID: "u1"}
 	w.analyze(context.Background(), sess, "明天买菜")
 
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-// TestAudioProcessorAnalyzeNoSwitch 集成验收：身份未变化且无待办/承诺时，不产生任何提醒。
-func TestAudioProcessorAnalyzeNoSwitch(t *testing.T) {
+// TestAudioProcessorAnalyzeEmptyExtraction 集成验收：识别到身份但未提取到待办/承诺时，仍回写身份与空提取结果。
+func TestAudioProcessorAnalyzeEmptyExtraction(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
 	sessions := repository.NewAudioSessionRepo(db)
 	identities := repository.NewIdentityRepo(db)
-	reminders := service.NewReminderService(repository.NewReminderRepo(db))
 	ai := newFakeAI(t,
 		map[string]interface{}{"identity_id": "i1", "confidence": 0.9},
 		map[string]interface{}{"todos": []interface{}{}, "commitments": []interface{}{}, "notes": []interface{}{}},
 	)
 
-	w := &AudioProcessor{sessions: sessions, identities: identities, ai: ai, reminders: reminders}
+	w := &AudioProcessor{sessions: sessions, identities: identities, ai: ai}
 	now := time.Now().UTC()
 
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, user_id, name")).
 		WithArgs("u1").
 		WillReturnRows(sqlmock.NewRows(workerIdentityCols).AddRow("i1", "u1", "工作", nil, "#000000", "person", true, now, now, nil))
-
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT identity_id FROM audio_sessions")).
-		WithArgs("u1", "s1").
-		WillReturnRows(sqlmock.NewRows([]string{"identity_id"}).AddRow("i1"))
 
 	wantExtracted, err := json.Marshal(model.ExtractedData{Todos: []model.Todo{}, Commitments: []model.Commitment{}, Notes: []string{}})
 	require.NoError(t, err)
@@ -168,7 +139,6 @@ func TestAudioProcessorAnalyzeDegradesOnAIError(t *testing.T) {
 
 	sessions := repository.NewAudioSessionRepo(db)
 	identities := repository.NewIdentityRepo(db)
-	reminders := service.NewReminderService(repository.NewReminderRepo(db))
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -176,15 +146,11 @@ func TestAudioProcessorAnalyzeDegradesOnAIError(t *testing.T) {
 	t.Cleanup(srv.Close)
 	ai := service.NewAIService(&config.Config{AIBaseURL: srv.URL, AIAPIKey: "k", AIModel: "m", AIConfidenceThreshold: 0.6})
 
-	w := &AudioProcessor{sessions: sessions, identities: identities, ai: ai, reminders: reminders}
+	w := &AudioProcessor{sessions: sessions, identities: identities, ai: ai}
 
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, user_id, name")).
 		WithArgs("u1").
 		WillReturnRows(sqlmock.NewRows(workerIdentityCols))
-
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT identity_id FROM audio_sessions")).
-		WithArgs("u1", "s1").
-		WillReturnRows(sqlmock.NewRows([]string{"identity_id"}))
 
 	emptyJSON, err := json.Marshal(model.ExtractedData{Todos: []model.Todo{}, Commitments: []model.Commitment{}, Notes: []string{}})
 	require.NoError(t, err)

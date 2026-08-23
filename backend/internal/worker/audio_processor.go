@@ -22,19 +22,17 @@ type AudioProcessor struct {
 	redis      *redis.Client
 	identities *repository.IdentityRepo
 	ai         *service.AIService
-	reminders  *service.ReminderService
 	interval   time.Duration
 	batchSize  int
 }
 
-func NewAudioProcessor(sessions *repository.AudioSessionRepo, stt *service.SttService, rdb *redis.Client, identities *repository.IdentityRepo, ai *service.AIService, reminders *service.ReminderService) *AudioProcessor {
+func NewAudioProcessor(sessions *repository.AudioSessionRepo, stt *service.SttService, rdb *redis.Client, identities *repository.IdentityRepo, ai *service.AIService) *AudioProcessor {
 	return &AudioProcessor{
 		sessions:   sessions,
 		stt:        stt,
 		redis:      rdb,
 		identities: identities,
 		ai:         ai,
-		reminders:  reminders,
 		interval:   5 * time.Second,
 		batchSize:  5,
 	}
@@ -113,13 +111,13 @@ func (w *AudioProcessor) processOne(ctx context.Context, sess *model.AudioSessio
 	}
 	log.Info("转写完成", zap.Int("text_len", len(text)))
 
-	// Phase 2：转写完成后进行 AI 分析（身份识别 + 信息提取），并生成提醒。
+	// Phase 2：转写完成后进行 AI 分析（身份识别 + 信息提取）。
 	if w.ai != nil {
 		w.analyze(ctx, sess, text)
 	}
 }
 
-// analyze 调用 AI 服务识别身份、提取结构化信息，回写会话并生成提醒。
+// analyze 调用 AI 服务识别身份、提取结构化信息，回写会话。
 func (w *AudioProcessor) analyze(ctx context.Context, sess *model.AudioSession, text string) {
 	if text == "" {
 		return
@@ -146,14 +144,6 @@ func (w *AudioProcessor) analyze(ctx context.Context, sess *model.AudioSession, 
 		return
 	}
 
-	// 查询上一条已绑定身份，用于身份切换检测。
-	var previousIdentityID *string
-	if prev, err := w.sessions.PreviousIdentityByUser(ctx, sess.UserID, sess.ID); err != nil {
-		logger.Log.Warn("查询上一条身份失败", zap.String("session_id", sess.ID), zap.Error(err))
-	} else {
-		previousIdentityID = prev
-	}
-
 	extractedJSON, err := json.Marshal(result.Extracted)
 	if err != nil {
 		logger.Log.Warn("序列化提取结果失败", zap.String("session_id", sess.ID), zap.Error(err))
@@ -166,12 +156,6 @@ func (w *AudioProcessor) analyze(ctx context.Context, sess *model.AudioSession, 
 	if err := w.sessions.UpdateAnalysis(ctx, sess.ID, identityID, &confidence, string(extractedJSON)); err != nil {
 		logger.Log.Error("回写 AI 分析结果失败", zap.String("session_id", sess.ID), zap.Error(err))
 		return
-	}
-
-	if w.reminders != nil {
-		if _, err := w.reminders.GenerateFromAnalysis(ctx, sess.UserID, sess.ID, result, previousIdentityID); err != nil {
-			logger.Log.Error("生成提醒失败", zap.String("session_id", sess.ID), zap.Error(err))
-		}
 	}
 
 	idStr := "nil"

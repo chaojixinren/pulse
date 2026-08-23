@@ -1,17 +1,16 @@
 # Phase 2：AI 增强开发文档
 
-> **目标**：在 Phase 1 转写闭环基础上，用 LLM（OpenAI 兼容 chat/completions）从转写文本中自动识别身份、提取待办/承诺/笔记，并通过设备与提醒体系把价值推给用户。
-> **完成标志**：系统能自动识别身份、提取结构化信息并产生提醒。
+> **目标**：在 Phase 1 转写闭环基础上，用 LLM（OpenAI 兼容 chat/completions）从转写文本中自动识别身份、提取待办/承诺/笔记。
+> **完成标志**：系统能自动识别身份、提取结构化信息。
 
 ## 模块依赖关系
 
 ```
 [1 AI 分析] ← 依赖 Phase1 的 STT + 身份
 [2 设备管理] ← 独立，依赖认证
-[3 提醒中心] ← 依赖 AI 分析
 ```
 
-建议顺序：先 1（AI 分析）→ 3（提醒）→ 2（设备）。设备管理较独立可并行。
+建议顺序：先 1（AI 分析）→ 2（设备）。设备管理较独立，可与 AI 分析并行。
 
 ---
 
@@ -142,69 +141,20 @@ internal/model/device.go
 
 ---
 
-## 模块 3：提醒中心
-
-### 职责
-基于 AI 提取的待办/承诺，生成提醒；身份切换时提示「上次未完成事项」。
-
-### 数据模型
-```sql
-CREATE TABLE reminders (
-    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
-    user_id CHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    session_id CHAR(36) REFERENCES audio_sessions(id) ON DELETE CASCADE,
-    identity_id CHAR(36) REFERENCES identities(id) ON DELETE SET NULL,
-    type VARCHAR(20) NOT NULL,               -- todo / commitment / identity_switch
-    content TEXT NOT NULL,
-    due_at DATETIME,
-    status VARCHAR(20) NOT NULL DEFAULT 'pending',  -- pending / done / dismissed
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-### 目录 / 文件
-```
-internal/api/reminder.go
-internal/service/reminder.go
-internal/repository/reminder.go
-internal/model/reminder.go
-```
-
-### HTTP 端点
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET  | /api/v1/reminders | 待处理提醒列表 |
-| PUT  | /api/v1/reminders/:id/done | 标记完成 |
-| PUT  | /api/v1/reminders/:id/dismiss | 忽略 |
-
-### 触发逻辑
-- AI 分析完成后，若 `extracted_data` 含 todos/commitments，自动生成对应 reminder。
-- 身份切换（新的身份识别结果与上一条不同）时生成 `identity_switch` 提醒，内容引用该身份下未完成的待办。
-
-### 验收标准
-- [x] 提取到待办后自动生成 reminder。
-- [x] 提醒可标记完成/忽略。
-- [x] 身份切换提醒引用正确身份下的未完成事项。
-
----
-
 ## Phase 2 整体验收清单
 
 - [x] AI 能识别身份并提取待办/承诺，低置信度降级不误绑。
 - [x] 设备可绑定、心跳、解绑。
-- [x] 待办/承诺自动生成提醒，身份切换有提醒。
 
 ---
 
 ## 实现说明
 
-三个模块已落地并配齐单元测试 + e2e 测试（`go test -race ./...` 全部通过）：
+两个模块已落地并配齐单元测试 + e2e 测试（`go test -race ./...` 全部通过）：
 
 - **AI 分析**：`internal/service/ai.go` 基于轻量 OpenAI 兼容 chat/completions 客户端（`net/http`，配置项 `AI_API_KEY` / `AI_BASE_URL` / `AI_MODEL`）做显式两阶段编排——先身份识别（worker 拉取用户身份列表作为候选标签、返回 identity_id + confidence），再信息提取（todos/commitments/notes）。JSON 解析失败重试一次，再失败降级为 `confidence=0`、不绑定身份；置信度低于 `AI_CONFIDENCE_THRESHOLD`（默认 0.6）同样不绑定。提示词集中在 `pkg/prompt`。
 - **设备管理**：`internal/service/device.go` + `internal/repository/device.go` 实现绑定码（一次性、10 分钟有效）、绑定/解绑、心跳、指令落库；绑定返回一次性设备 token（仅存哈希）。
-- **提醒中心**：`internal/service/reminder.go` 依据分析结果自动生成 todo/commitment 提醒；身份相对上一条变化时生成 identity_switch 提醒并引用该身份下未完成待办。
-- 数据模型见 `backend/migrations/002_phase2.sql`（devices / device_bind_codes / device_commands / reminders）。
+- 数据模型见 `backend/migrations/002_phase2.sql`（devices / device_bind_codes / device_commands）。
 
 > 注：文档早期标注的 adk-go + eino 框架未引入；实际采用轻量 OpenAI 兼容 chat/completions 客户端（`net/http`）做显式两阶段编排，兼顾低依赖与可测试性。后续如需 eino Graph 编排可平滑替换 `AIService` 内部实现而不改对外签名。
 
@@ -223,9 +173,5 @@ internal/model/reminder.go
 | 设备绑定/解绑、绑定码一次性 | `device_test.go`、`device_extended_test.go` | `internal/api/e2e_test.go`、`e2e_phase2_test.go` |
 | 心跳更新电量/版本 | `device_test.go`、`device_extended_test.go` | `e2e_test.go` |
 | 指令下发（落库） | `device_test.go`、`device_extended_test.go` | `e2e_phase2_test.go` |
-| 待办/承诺自动生成提醒 | `reminder_test.go`、`reminder_extended_test.go` | `audio_processor_analyze_test.go` |
-| 提醒完成/忽略 | `reminder_test.go`、`reminder_extended_test.go` | `e2e_test.go`、`e2e_phase2_test.go` |
-| 身份切换提醒引用正确身份 | `reminder_test.go`、`reminder_extended_test.go` | `audio_processor_analyze_test.go` |
 
 真实基础设施 e2e（需 MySQL/Redis，先执行 migrations）见 `test/e2e_live_test.go` 与 `test/e2e_live_phase2_test.go`（`go test -tags e2e`）。
-

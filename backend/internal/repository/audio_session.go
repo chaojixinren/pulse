@@ -130,18 +130,6 @@ func (r *AudioSessionRepo) UpdateAnalysis(ctx context.Context, id string, identi
 	return err
 }
 
-// PreviousIdentityByUser 返回该用户最近一条（排除指定会话）已绑定身份的 identity_id。
-func (r *AudioSessionRepo) PreviousIdentityByUser(ctx context.Context, userID, excludeID string) (*string, error) {
-	var id *string
-	err := r.db.QueryRowContext(ctx,
-		`SELECT identity_id FROM audio_sessions WHERE user_id = ? AND id != ? AND identity_id IS NOT NULL ORDER BY created_at DESC, id DESC LIMIT 1`,
-		userID, excludeID).Scan(&id)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	return id, err
-}
-
 // ClaimProcessing 原子地将 pending（或重试后重新进入 processing）的会话置为 processing。
 // Phase 1 为单 worker，故 processing 的重入是幂等的；多 worker 下 pending→processing 仍是原子独占。
 func (r *AudioSessionRepo) ClaimProcessing(ctx context.Context, id string) (bool, error) {

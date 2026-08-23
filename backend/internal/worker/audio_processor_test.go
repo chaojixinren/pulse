@@ -152,9 +152,8 @@ func TestAudioProcessorAnalyzeWithoutAI(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 
 	sessions := repository.NewAudioSessionRepo(db)
-	reminders := service.NewReminderService(repository.NewReminderRepo(db))
 
-	w := &AudioProcessor{sessions: sessions, ai: nil, reminders: reminders}
+	w := &AudioProcessor{sessions: sessions, ai: nil}
 
 	sess := &model.AudioSession{ID: "s1", UserID: "u1"}
 	// AI 服务未配置时，analyze 应直接返回、不做任何 DB 访问。

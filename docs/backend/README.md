@@ -18,7 +18,7 @@
 | 阶段 | 目标 | 核心模块 | 完成标志 |
 |------|------|----------|----------|
 | [Phase 1：MVP](phase-1-mvp.md) | 跑通「上传音频 → 转写 → 查看」最小闭环 | 骨架、认证、音频上传、MySQL 存储、语音会话、STT 转写、身份、时间线、日报 | 硬件上传的音频能被转写并在前端时间线查看 |
-| [Phase 2：AI 增强](phase-2-ai.md) | 从转写文本提取结构化信息并推送提醒 | AI 分析（身份识别/信息提取）、设备管理、提醒中心 | 系统能自动识别身份、提取待办/承诺并提醒 |
+| [Phase 2：AI 增强](phase-2-ai.md) | 从转写文本提取结构化信息 | AI 分析（身份识别/信息提取）、设备管理 | 系统能自动识别身份、提取待办/承诺 |
 | [Phase 3：生产化](phase-3-production.md) | 达到可上线标准 | 报告增强、加密存储、数据删除/导出、限流配额、可观测性、部署 | 通过安全检查，可灰度上线 |
 
 ## 后端目录结构（目标态）
@@ -37,8 +37,7 @@ backend/
 │   │   ├── identity.go
 │   │   ├── timeline.go
 │   │   ├── device.go            # Phase 2
-│   │   ├── report.go
-│   │   └── reminder.go          # Phase 2
+│   │   └── report.go
 │   ├── service/                 # 业务逻辑层
 │   │   ├── auth.go
 │   │   ├── audio.go
@@ -47,21 +46,18 @@ backend/
 │   │   ├── identity.go
 │   │   ├── timeline.go
 │   │   ├── report.go
-│   │   ├── device.go            # Phase 2
-│   │   └── reminder.go          # Phase 2
+│   │   └── device.go            # Phase 2
 │   ├── repository/              # 数据访问层（与 service 分离）
 │   │   ├── user.go
 │   │   ├── identity.go
 │   │   ├── audio_session.go
-│   │   ├── device.go
-│   │   └── reminder.go
+│   │   └── device.go
 │   ├── model/                   # 数据模型 struct
 │   │   ├── user.go
 │   │   ├── identity.go
 │   │   ├── audio_session.go
 │   │   ├── device.go
-│   │   ├── refresh_token.go
-│   │   └── reminder.go
+│   │   └── refresh_token.go
 │   ├── middleware/              # 中间件
 │   │   ├── auth.go              # JWT 认证
 │   │   ├── logger.go
@@ -144,7 +140,6 @@ type Response struct {
 | 日报 | 1 | api/report、service/report | 时间线 |
 | AI 分析 | 2 | service/ai（chat/completions） | STT、身份 |
 | 设备管理 | 2 | api/device、service/device、model/device | 认证 |
-| 提醒中心 | 2 | api/reminder、service/reminder、model/reminder | AI 分析 |
 | 报告增强 | 3 | service/report | 时间线、AI |
 | 加密存储 | 3 | service/audio | 存储 |
 | 数据删除/导出 | 3 | api/export、service/export | 各模块 |
@@ -158,7 +153,7 @@ type Response struct {
 
 1. Phase 1 先搭骨架 + 认证，因为所有后续接口都依赖 JWT 中间件。
 2. Phase 1 的音频上传 → 存储 → 会话 → STT → 时间线 是一条强依赖链，按此顺序开发。
-3. Phase 2 的 AI 分析依赖 Phase 1 的 STT 与身份，提醒中心依赖 AI 分析。
+3. Phase 2 的 AI 分析依赖 Phase 1 的 STT 与身份；设备管理较独立，可与 AI 分析并行。
 4. Phase 3 可并行推进：加密存储、限流、可观测性相互独立。
 
 ## 相关文档
