@@ -5,8 +5,9 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// Log 是全局 zap 日志器，在 main 中调用 Init 后可用。
-var Log *zap.Logger
+// Log 是全局 zap 日志器；默认 no-op 避免在 Init 前调用时 panic，
+// main 中调用 Init 后会替换为真实日志器。
+var Log *zap.Logger = zap.NewNop()
 
 // Init 根据运行环境初始化 zap 日志器。
 func Init(environment, level string) {
