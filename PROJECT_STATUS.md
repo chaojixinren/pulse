@@ -9,7 +9,7 @@ Pulse 是一个智能身份空间系统，通过可穿戴硬件设备采集用�
 ### 后端
 - **语言**: Go 1.21+
 - **框架**: Gin
-- **AI SDK**: adk-go + eino
+- **AI SDK**: OpenAI 兼容 chat/completions（net/http）
 - **STT 服务**: StepFun StepAudio-2.5-ASR
 - **数据库**: MySQL 8.0+ (主数据)
 - **缓存**: Redis 7+ (会话、热点数据)
@@ -154,7 +154,7 @@ git push -u origin main
 - [ ] 实现用户认证（JWT）
 - [ ] 实现数据库模型和迁移
 - [ ] 实现语音上传接口
-- [ ] 集成 adk-go + eino 进行 AI 分析
+- [ ] 集成 LLM（chat/completions）进行 AI 分析
 - [ ] 实现身份管理 CRUD
 - [ ] 实现时间线和报告 API
 
@@ -221,7 +221,7 @@ git push -u origin main
    - 创建基础页面布局
 
 ### 后续待办
-1. ⬜ 集成 adk-go + eino AI SDK
+1. ⬜ 集成 LLM（chat/completions）AI SDK
 2. ⬜ 实现完整的 API 接口
 3. ✅ 决定硬件技术栈（ESP32-S3）
 4. ⬜ 制定详细的开发计划

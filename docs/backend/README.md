@@ -6,7 +6,7 @@
 ## 技术栈（已确定）
 
 - **语言/框架**：Go 1.21+ / Gin
-- **AI SDK**：adk-go + eino
+- **AI SDK**：OpenAI 兼容 chat/completions（net/http）
 - **STT**：StepFun StepAudio-2.5-ASR
 - **数据库**：MySQL 8.0+（主数据）
 - **缓存**：Redis 7+（会话、热点数据）
@@ -43,7 +43,7 @@ backend/
 │   │   ├── auth.go
 │   │   ├── audio.go
 │   │   ├── stt.go               # StepFun STT 封装
-│   │   ├── ai.go                # adk-go + eino 编排
+│   │   ├── ai.go                # chat/completions 编排
 │   │   ├── identity.go
 │   │   ├── timeline.go
 │   │   ├── report.go
@@ -92,7 +92,7 @@ backend/
 HTTP 请求 → api(handler) → service(业务逻辑) → repository(数据访问) → MySQL
                                   │
                                   ├→ stt(StepFun)
-                                  └→ ai(adk-go + eino)
+                                  └→ ai(chat/completions)
 
 后台任务 → worker → service → ...
 ```
@@ -142,7 +142,7 @@ type Response struct {
 | 身份管理 | 1 | api/identity、service/identity、model/identity | 认证 |
 | 时间线 | 1 | api/timeline、service/timeline | 会话、身份 |
 | 日报 | 1 | api/report、service/report | 时间线 |
-| AI 分析 | 2 | service/ai（adk-go + eino） | STT、身份 |
+| AI 分析 | 2 | service/ai（chat/completions） | STT、身份 |
 | 设备管理 | 2 | api/device、service/device、model/device | 认证 |
 | 提醒中心 | 2 | api/reminder、service/reminder、model/reminder | AI 分析 |
 | 报告增强 | 3 | service/report | 时间线、AI |

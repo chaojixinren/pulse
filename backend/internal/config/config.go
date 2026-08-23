@@ -21,6 +21,11 @@ type Config struct {
 	StepFunBaseURL  string
 	StepFunSTTModel string
 
+	AIAPIKey              string
+	AIBaseURL             string
+	AIModel               string
+	AIConfidenceThreshold float64
+
 	JWTSecret       string
 	JWTExpiresIn    time.Duration
 	RefreshTokenTTL time.Duration
@@ -60,21 +65,30 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("AUDIO_RETENTION_DAYS 配置无效: %w", err)
 	}
 
+	aiConfidence, err := strconv.ParseFloat(getEnv("AI_CONFIDENCE_THRESHOLD", "0.6"), 64)
+	if err != nil {
+		return nil, fmt.Errorf("AI_CONFIDENCE_THRESHOLD 配置无效: %w", err)
+	}
+
 	cfg := &Config{
-		Port:               getEnv("PORT", "8080"),
-		GINMode:            getEnv("GIN_MODE", "debug"),
-		MySQLDSN:           os.Getenv("DATABASE_DSN"),
-		RedisURL:           getEnv("REDIS_URL", "redis://localhost:6379"),
-		StepFunAPIKey:      os.Getenv("STEPFUN_API_KEY"),
-		StepFunBaseURL:     getEnv("STEPFUN_API_BASE", "https://api.stepfun.com/v1"),
-		StepFunSTTModel:    getEnv("STEPFUN_STT_MODEL", "stepaudio-2.5-asr"),
-		JWTSecret:          os.Getenv("JWT_SECRET"),
-		JWTExpiresIn:       expires,
-		RefreshTokenTTL:    refreshTTL,
-		AllowedOrigins:     splitCSV(os.Getenv("ALLOWED_ORIGINS")),
-		LogLevel:           getEnv("LOG_LEVEL", "info"),
-		MaxAudioSize:       maxAudioSize,
-		AudioRetentionDays: retention,
+		Port:                  getEnv("PORT", "8080"),
+		GINMode:               getEnv("GIN_MODE", "debug"),
+		MySQLDSN:              os.Getenv("DATABASE_DSN"),
+		RedisURL:              getEnv("REDIS_URL", "redis://localhost:6379"),
+		StepFunAPIKey:         os.Getenv("STEPFUN_API_KEY"),
+		StepFunBaseURL:        getEnv("STEPFUN_API_BASE", "https://api.stepfun.com/v1"),
+		StepFunSTTModel:       getEnv("STEPFUN_STT_MODEL", "stepaudio-2.5-asr"),
+		AIAPIKey:              os.Getenv("AI_API_KEY"),
+		AIBaseURL:             getEnv("AI_BASE_URL", "https://api.openai.com/v1"),
+		AIModel:               getEnv("AI_MODEL", "gpt-4o-mini"),
+		AIConfidenceThreshold: aiConfidence,
+		JWTSecret:             os.Getenv("JWT_SECRET"),
+		JWTExpiresIn:          expires,
+		RefreshTokenTTL:       refreshTTL,
+		AllowedOrigins:        splitCSV(os.Getenv("ALLOWED_ORIGINS")),
+		LogLevel:              getEnv("LOG_LEVEL", "info"),
+		MaxAudioSize:          maxAudioSize,
+		AudioRetentionDays:    retention,
 	}
 
 	if err := cfg.validate(); err != nil {

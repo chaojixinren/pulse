@@ -24,6 +24,8 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) (*gin.Engine, 
 	tokenRepo := repository.NewRefreshTokenRepo(db)
 	sessionRepo := repository.NewAudioSessionRepo(db)
 	identityRepo := repository.NewIdentityRepo(db)
+	deviceRepo := repository.NewDeviceRepo(db)
+	reminderRepo := repository.NewReminderRepo(db)
 
 	// services
 	authService := service.NewAuthService(cfg, userRepo, tokenRepo)
@@ -32,6 +34,9 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) (*gin.Engine, 
 	identityService := service.NewIdentityService(identityRepo)
 	timelineService := service.NewTimelineService(sessionRepo)
 	reportService := service.NewReportService(sessionRepo, identityRepo)
+	aiService := service.NewAIService(cfg)
+	deviceService := service.NewDeviceService(deviceRepo)
+	reminderService := service.NewReminderService(reminderRepo)
 
 	// handlers
 	healthHandler := NewHealthHandler(db, rdb)
@@ -40,9 +45,11 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) (*gin.Engine, 
 	identityHandler := NewIdentityHandler(identityService)
 	timelineHandler := NewTimelineHandler(timelineService)
 	reportHandler := NewReportHandler(reportService)
+	deviceHandler := NewDeviceHandler(deviceService)
+	reminderHandler := NewReminderHandler(reminderService)
 
 	// worker
-	processor := worker.NewAudioProcessor(sessionRepo, sttService, rdb)
+	processor := worker.NewAudioProcessor(sessionRepo, sttService, rdb, identityRepo, aiService, reminderService)
 
 	r.GET("/health", healthHandler.Check)
 
@@ -69,6 +76,18 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) (*gin.Engine, 
 			authed.PUT("/identities/:id/default", identityHandler.SetDefault)
 			authed.GET("/timeline", timelineHandler.List)
 			authed.GET("/reports/daily", reportHandler.Daily)
+
+			authed.POST("/devices/bind-code", deviceHandler.GenerateBindCode)
+			authed.POST("/devices/bind", deviceHandler.Bind)
+			authed.GET("/devices", deviceHandler.List)
+			authed.GET("/devices/:id", deviceHandler.Get)
+			authed.DELETE("/devices/:id", deviceHandler.Unbind)
+			authed.POST("/devices/:id/heartbeat", deviceHandler.Heartbeat)
+			authed.POST("/devices/:id/command", deviceHandler.Command)
+
+			authed.GET("/reminders", reminderHandler.List)
+			authed.PUT("/reminders/:id/done", reminderHandler.Done)
+			authed.PUT("/reminders/:id/dismiss", reminderHandler.Dismiss)
 		}
 	}
 

@@ -33,7 +33,7 @@
        ↓              ↓              ↓
 ┌─────────────┐ ┌─────────────┐ ┌──────────────┐
 │    MySQL    │ │   Redis     │ │  AI Service  │
-│  (主数据库)  │ │   (缓存)    │ │(adk-go+eino) │
+│  (主数据库)  │ │   (缓存)    │ │(adk-go)       │
 │  (含音频)    │ │             │ │              │
 └─────────────┘ └─────────────┘ └──────┬───────┘
                                        │
@@ -55,7 +55,7 @@
 │         Service Layer                   │  业务逻辑处理
 │  - AuthService                          │
 │  - AudioService                         │
-│  - AIService (adk-go + eino)            │
+│  - AIService (adk-go)                    │
 │  - IdentityService                      │
 │  - ReportService                        │
 ├─────────────────────────────────────────┤
@@ -68,7 +68,7 @@
 │  - Database (MySQL)                     │
 │  - Cache (Redis)                        │
 │  - Storage (MySQL LONGBLOB)             │
-│  - AI Client (adk-go + eino)            │
+│  - AI Client (adk-go)                    │
 └─────────────────────────────────────────┘
 ```
 
@@ -86,7 +86,7 @@
 - 语音会话管理
 
 #### 1.3.3 AI 分析模块 (AI Service)
-- 使用 adk-go + eino SDK
+- 使用 adk-go SDK
 - 身份识别
 - 信息提取（待办、笔记、承诺）
 - 对话上下文理解
@@ -519,7 +519,7 @@ func Down_001(db *sql.DB) error {
 
 ## 4. AI 服务集成方案
 
-### 4.1 adk-go + eino 架构
+### 4.1 adk-go 架构
 
 ```
 ┌──────────────────────────────────────────────────────┐
@@ -529,14 +529,8 @@ func Down_001(db *sql.DB) error {
 │  │           AIService                        │    │
 │  │                                            │    │
 │  │  ┌──────────────────────────────────────┐ │    │
-│  │  │       adk-go Client                  │ │    │
-│  │  │  (AI Orchestration & Prompt Mgmt)   │ │    │
-│  │  └──────────────┬───────────────────────┘ │    │
-│  │                 │                          │    │
-│  │                 ↓                          │    │
-│  │  ┌──────────────────────────────────────┐ │    │
-│  │  │        eino Framework                │ │    │
-│  │  │  (Multi-step AI Workflow Engine)     │ │    │
+│  │  │       adk-go Workflow               │ │    │
+│  │  │  (sequentialagent two-stage)        │ │    │
 │  │  └──────────────┬───────────────────────┘ │    │
 │  │                 │                          │    │
 │  └─────────────────┼──────────────────────────┘    │
@@ -544,260 +538,120 @@ func Down_001(db *sql.DB) error {
                     │
                     ↓
         ┌───────────────────────────┐
-        │   StepFun API (STT)       │
-        │   StepAudio-2.5-ASR       │
+        │   LLM (OpenAI-compatible) │
+        │   openaimodel             │
         └───────────────────────────┘
 ```
+
+> 说明：语音转文字由独立的 `service/stt` 调用 StepFun StepAudio-2.5-ASR 完成；AI 分析由 `AIService` 基于 adk-go 的 `sequentialagent` 串行编排「身份识别 → 信息提取」两阶段，模型经 OpenAI 兼容接口（`openaimodel`）接入。
 
 ### 4.2 AI 服务实现示例
 
 ```go
-// internal/service/ai_service.go
+// internal/service/ai.go
 package service
 
 import (
     "context"
     "fmt"
-    
+
+    "github.com/chaojixinren/pulse/internal/config"
     "github.com/chaojixinren/pulse/internal/model"
-    "github.com/volcengine/adk-go/adk"
-    "github.com/volcengine/eino/flow"
+    "github.com/chaojixinren/pulse/pkg/prompt"
+    "google.golang.org/adk/v2/agent"
+    "google.golang.org/adk/v2/agent/llmagent"
+    "google.golang.org/adk/v2/agent/workflowagents/sequentialagent"
+    "google.golang.org/adk/v2/model/openaimodel"
+    "google.golang.org/adk/v2/runner"
 )
 
 type AIService struct {
-    adkClient *adk.Client
-    einoFlow  *flow.Flow
+    workflow  agent.Agent
+    runner    *runner.Runner
+    threshold float64
 }
 
-func NewAIService(apiKey, baseURL string) (*AIService, error) {
-    // 初始化 adk-go 客户端
-    client := adk.NewClient(adk.Config{
-        APIKey:  apiKey,
-        BaseURL: baseURL,
-    })
+func NewAIService(cfg *config.Config) *AIService {
+    ctx := context.Background()
 
-    // 创建 eino 工作流
-    flowConfig := flow.NewFlow(
-        flow.WithSteps(
-            flow.Step{
-                Name: "transcribe",
-                Type: "stt",
-            },
-            flow.Step{
-                Name: "analyze",
-                Type: "llm",
-            },
-            flow.Step{
-                Name: "extract",
-                Type: "llm",
-            },
-        ),
-    )
+    // 1. 创建 OpenAI 兼容模型客户端
+    llmModel, err := openaimodel.NewModel(ctx, cfg.AIModel, &openaimodel.ClientConfig{
+        APIKey:  cfg.AIAPIKey,
+        BaseURL: cfg.AIBaseURL,
+    })
+    if err != nil {
+        panic(fmt.Sprintf("创建 OpenAI 模型失败: %v", err))
+    }
+
+    // 2. 阶段 1：身份识别 agent
+    identityAgent, err := llmagent.New(llmagent.Config{
+        Name:        "identity_recognizer",
+        Description: "识别对话所属的身份角色",
+        Model:       llmModel,
+        Instruction: prompt.IdentitySystemPrompt,
+        Mode:        llmagent.ModeSingleTurn,
+    })
+    if err != nil {
+        panic(fmt.Sprintf("创建身份识别 agent 失败: %v", err))
+    }
+
+    // 3. 阶段 2：信息提取 agent
+    extractionAgent, err := llmagent.New(llmagent.Config{
+        Name:        "info_extractor",
+        Description: "从对话中提取待办、承诺和笔记",
+        Model:       llmModel,
+        Instruction: prompt.ExtractionSystemPrompt,
+        Mode:        llmagent.ModeSingleTurn,
+    })
+    if err != nil {
+        panic(fmt.Sprintf("创建信息提取 agent 失败: %v", err))
+    }
+
+    // 4. sequential workflow 串行编排两阶段
+    workflow, err := sequentialagent.New(sequentialagent.Config{
+        AgentConfig: agent.Config{
+            Name:        "pulse_analysis",
+            Description: "身份识别与信息提取流程",
+            SubAgents:   []agent.Agent{identityAgent, extractionAgent},
+        },
+    })
+    if err != nil {
+        panic(fmt.Sprintf("创建 sequential workflow 失败: %v", err))
+    }
+
+    // 5. in-memory runner
+    r, err := runner.NewInMemory("pulse-ai", workflow)
+    if err != nil {
+        panic(fmt.Sprintf("创建 runner 失败: %v", err))
+    }
 
     return &AIService{
-        adkClient: client,
-        einoFlow:  flowConfig,
-    }, nil
+        workflow:  workflow,
+        runner:    r,
+        threshold: cfg.AIConfidenceThreshold,
+    }
 }
 
-// TranscribeAudio 语音转文字
-func (s *AIService) TranscribeAudio(ctx context.Context, audioData []byte) (string, error) {
-    req := adk.STTRequest{
-        AudioData: audioData,
-        Model:     "stepfun/stepaudio-2.5-asr",
-        Language:  "zh",
-    }
-
-    resp, err := s.adkClient.STT(ctx, req)
-    if err != nil {
-        return "", fmt.Errorf("STT failed: %w", err)
-    }
-
-    return resp.Text, nil
-}
-
-// IdentifyContext 识别身份和上下文
-func (s *AIService) IdentifyContext(ctx context.Context, transcript string, userIdentities []model.Identity) (*ContextAnalysis, error) {
-    // 构建身份列表提示词
-    identityPrompt := "用户定义的身份:\n"
-    for _, identity := range userIdentities {
-        identityPrompt += fmt.Sprintf("- %s: %s\n", identity.Name, identity.Description)
-    }
-
-    prompt := fmt.Sprintf(`
-分析以下对话内容，识别说话者当前的身份角色。
-
-%s
-
-对话内容:
-%s
-
-请以 JSON 格式返回分析结果:
-{
-  "identity": "识别的身份名称",
-  "confidence": 0.95,
-  "reasoning": "判断理由"
-}
-`, identityPrompt, transcript)
-
-    req := adk.ChatRequest{
-        Model: "doubao-pro",
-        Messages: []adk.Message{
-            {
-                Role:    "system",
-                Content: "你是一个专业的对话分析助手，擅长从对话内容识别说话者的身份角色。",
-            },
-            {
-                Role:    "user",
-                Content: prompt,
-            },
-        },
-        ResponseFormat: adk.ResponseFormat{Type: "json_object"},
-    }
-
-    resp, err := s.adkClient.Chat(ctx, req)
-    if err != nil {
-        return nil, fmt.Errorf("identity analysis failed: %w", err)
-    }
-
-    var analysis ContextAnalysis
-    if err := json.Unmarshal([]byte(resp.Content), &analysis); err != nil {
-        return nil, fmt.Errorf("failed to parse analysis: %w", err)
-    }
-
-    return &analysis, nil
-}
-
-// ExtractInformation 提取待办事项、笔记、承诺
-func (s *AIService) ExtractInformation(ctx context.Context, transcript string) (*ExtractedData, error) {
-    prompt := fmt.Sprintf(`
-从以下对话中提取关键信息:
-
-对话内容:
-%s
-
-请以 JSON 格式返回:
-{
-  "todos": ["待办事项1", "待办事项2"],
-  "notes": ["重要笔记1", "重要笔记2"],
-  "commitments": ["承诺1", "承诺2"]
-}
-
-提取规则:
-- todos: 需要完成的任务、行动项
-- notes: 重要的信息、观察、想法
-- commitments: 对他人的承诺、约定
-`, transcript)
-
-    req := adk.ChatRequest{
-        Model: "doubao-pro",
-        Messages: []adk.Message{
-            {
-                Role:    "system",
-                Content: "你是一个专业的信息提取助手。",
-            },
-            {
-                Role:    "user",
-                Content: prompt,
-            },
-        },
-        ResponseFormat: adk.ResponseFormat{Type: "json_object"},
-    }
-
-    resp, err := s.adkClient.Chat(ctx, req)
-    if err != nil {
-        return nil, fmt.Errorf("information extraction failed: %w", err)
-    }
-
-    var data ExtractedData
-    if err := json.Unmarshal([]byte(resp.Content), &data); err != nil {
-        return nil, fmt.Errorf("failed to parse extracted data: %w", err)
-    }
-
-    return &data, nil
-}
-
-type ContextAnalysis struct {
-    Identity   string  `json:"identity"`
-    Confidence float64 `json:"confidence"`
-    Reasoning  string  `json:"reasoning"`
-}
-
-type ExtractedData struct {
-    Todos       []string `json:"todos"`
-    Notes       []string `json:"notes"`
-    Commitments []string `json:"commitments"`
+// AnalyzeTranscript 转写文本 + 用户身份列表 → 分析结果。
+// 通过 runner 串行执行「身份识别 → 信息提取」两阶段。
+func (s *AIService) AnalyzeTranscript(ctx context.Context, transcript string, identities []model.Identity) (*model.AnalysisResult, error) {
+    // 阶段 1：身份识别（候选身份作为标签传入）
+    // 阶段 2：信息提取（todos / commitments / notes）
+    // 两阶段均通过 s.runner.Run 执行并解析 JSON 输出，失败时降级处理
+    ...
 }
 ```
 
-### 4.3 使用 eino 的多步骤工作流
+### 4.3 使用 adk-go 的多步骤工作流
 
-```go
-// internal/service/audio_workflow.go
-package service
+adk-go v2 用 `sequentialagent` 将多个子 agent 串成工作流，由 `runner` 串行执行并流式产出事件。两阶段流程如下：
 
-import (
-    "context"
-    
-    "github.com/volcengine/eino/flow"
-)
+1. **身份识别**（`identity_recognizer`）：把用户已有身份列表作为候选标签传入，返回 `identity_id` + `confidence`。
+2. **信息提取**（`info_extractor`）：从转写文本结构化抽取 todos / commitments / notes。
 
-// ProcessAudioWorkflow 完整的语音处理工作流
-func (s *AIService) ProcessAudioWorkflow(ctx context.Context, audioData []byte, userIdentities []model.Identity) (*WorkflowResult, error) {
-    // 定义工作流
-    workflow := flow.NewFlow(
-        flow.WithContext(ctx),
-        flow.WithSteps(
-            // Step 1: 语音转文字
-            flow.Step{
-                Name: "transcribe",
-                Func: func(ctx context.Context, input flow.Input) (flow.Output, error) {
-                    transcript, err := s.TranscribeAudio(ctx, input.Get("audio_data").([]byte))
-                    return flow.Output{"transcript": transcript}, err
-                },
-            },
-            // Step 2: 识别身份
-            flow.Step{
-                Name: "identify",
-                Func: func(ctx context.Context, input flow.Input) (flow.Output, error) {
-                    transcript := input.Get("transcript").(string)
-                    analysis, err := s.IdentifyContext(ctx, transcript, userIdentities)
-                    return flow.Output{"analysis": analysis}, err
-                },
-            },
-            // Step 3: 提取信息
-            flow.Step{
-                Name: "extract",
-                Func: func(ctx context.Context, input flow.Input) (flow.Output, error) {
-                    transcript := input.Get("transcript").(string)
-                    data, err := s.ExtractInformation(ctx, transcript)
-                    return flow.Output{"extracted_data": data}, err
-                },
-            },
-        ),
-    )
+每个阶段独立调用 `runner.Run` 执行；LLM 返回非法 JSON 时重试一次，仍失败则降级（`confidence=0`、不绑定身份）。置信度低于阈值（默认 0.6）时不自动绑定身份，交给用户手动标注。
 
-    // 执行工作流
-    result, err := workflow.Run(flow.Input{
-        "audio_data": audioData,
-    })
-    if err != nil {
-        return nil, err
-    }
-
-    return &WorkflowResult{
-        Transcript:    result.Get("transcript").(string),
-        Analysis:      result.Get("analysis").(*ContextAnalysis),
-        ExtractedData: result.Get("extracted_data").(*ExtractedData),
-    }, nil
-}
-
-type WorkflowResult struct {
-    Transcript    string
-    Analysis      *ContextAnalysis
-    ExtractedData *ExtractedData
-}
-```
+完整实现与验收标准见 [Phase 2：AI 增强开发文档](backend/phase-2-ai.md)。
 
 ## 5. 核心业务流程
 
@@ -829,7 +683,7 @@ type WorkflowResult struct {
 │  2. 更新状态为 processing               │
 │  3. 调用 StepFun STT API               │
 │  4. 获取转录文本                        │
-│  5. 调用 AI 分析（adk-go + eino）       │
+│  5. 调用 AI 分析（adk-go）              │
 │     - 识别身份                          │
 │     - 提取信息                          │
 │  6. 更新 audio_session 记录             │
@@ -967,6 +821,7 @@ type AudioService struct {
     repo          *repository.AudioSessionRepository
     identityRepo  *repository.IdentityRepository
     aiService     *AIService
+    sttService    *SttService
     cache         *redis.Client
 }
 
@@ -987,8 +842,8 @@ func (s *AudioService) ProcessAudioAsync(sessionID uuid.UUID) {
         return
     }
 
-    // 3. 调用 STT
-    transcript, err := s.aiService.TranscribeAudio(ctx, session.AudioData)
+    // 3. 调用 STT（StepFun StepAudio-2.5-ASR）
+    transcript, err := s.sttService.Transcribe(ctx, session.AudioData, "audio.wav")
     if err != nil {
         s.handleProcessError(ctx, session, err)
         return
@@ -1002,32 +857,22 @@ func (s *AudioService) ProcessAudioAsync(sessionID uuid.UUID) {
         return
     }
 
-    // 5. 识别身份
-    analysis, err := s.aiService.IdentifyContext(ctx, transcript, identities)
+    // 5. 调用 AI 分析（adk-go）：识别身份 + 提取信息
+    analysis, err := s.aiService.AnalyzeTranscript(ctx, transcript, identities)
     if err != nil {
         s.handleProcessError(ctx, session, err)
         return
     }
 
-    // 查找匹配的身份
-    for _, identity := range identities {
-        if identity.Name == analysis.Identity {
-            session.IdentityID = &identity.ID
-            session.AIConfidence = analysis.Confidence
-            break
-        }
+    // 绑定身份（低置信度时 AnalyzeTranscript 不返回 identity_id）
+    if analysis.IdentityID != nil {
+        session.IdentityID = analysis.IdentityID
+        session.AIConfidence = &analysis.Confidence
     }
 
-    // 6. 提取信息
-    extractedData, err := s.aiService.ExtractInformation(ctx, transcript)
-    if err != nil {
-        s.handleProcessError(ctx, session, err)
-        return
-    }
-
-    // 转换为 JSON
-    dataJSON, _ := json.Marshal(extractedData)
-    session.ExtractedData = dataJSON
+    // 6. 提取结果写入 JSON
+    dataJSON, _ := json.Marshal(analysis.Extracted)
+    session.ExtractedData = string(dataJSON)
 
     // 7. 更新会话状态
     session.Status = "completed"
@@ -1692,7 +1537,7 @@ func Init(environment string) {
 1. **系统架构**：采用分层架构，清晰划分了 API、服务、数据访问等层次
 2. **API 设计**：提供了完整的 RESTful API 端点，涵盖认证、语音、身份、报告等模块
 3. **数据库设计**：设计了合理的表结构，支持用户、身份、语音会话等核心实体
-4. **AI 集成**：基于 adk-go + eino 实现语音转文字、身份识别、信息提取的完整工作流
+4. **AI 集成**：基于 adk-go 实现语音转文字、身份识别、信息提取的完整工作流
 5. **业务流程**：明确了语音上传、处理、分析的端到端流程
 6. **安全设计**：实现了 JWT 认证、限流、数据加密等安全机制
 

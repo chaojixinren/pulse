@@ -6,7 +6,7 @@
 
 - **语言**：Go 1.21+
 - **框架**：Gin
-- **AI SDK**：adk-go + eino
+- **AI SDK**：OpenAI 兼容 chat/completions（net/http）
 - **STT 服务**：StepFun StepAudio-2.5-ASR
 - **数据库**：MySQL 8.0+
 - **缓存**：Redis 7+
@@ -26,7 +26,7 @@ backend/
 │   │   ├── identity.go   # 身份管理
 │   │   └── report.go     # 报告生成
 │   ├── service/          # 业务逻辑
-│   │   ├── ai.go         # AI 分析服务 (adk-go + eino)
+│   │   ├── ai.go         # AI 分析服务 (chat/completions)
 │   │   └── stt.go        # STT 转写
 │   ├── model/            # 数据模型
 │   │   ├── user.go
@@ -67,7 +67,7 @@ GIN_MODE=debug
 DATABASE_DSN=user:password@tcp(localhost:3306)/pulse?charset=utf8mb4&parseTime=True&loc=Local
 REDIS_URL=redis://localhost:6379
 
-# AI 服务 (adk-go + eino)
+# AI 服务 (chat/completions)
 AI_API_KEY=your_ai_api_key
 AI_BASE_URL=https://api.example.com
 

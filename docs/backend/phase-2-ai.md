@@ -1,6 +1,6 @@
 # Phase 2：AI 增强开发文档
 
-> **目标**：在 Phase 1 转写闭环基础上，用 adk-go + eino 从转写文本中自动识别身份、提取待办/承诺/笔记，并通过设备与提醒体系把价值推给用户。
+> **目标**：在 Phase 1 转写闭环基础上，用 LLM（OpenAI 兼容 chat/completions）从转写文本中自动识别身份、提取待办/承诺/笔记，并通过设备与提醒体系把价值推给用户。
 > **完成标志**：系统能自动识别身份、提取结构化信息并产生提醒。
 
 ## 模块依赖关系
@@ -15,7 +15,7 @@
 
 ---
 
-## 模块 1：AI 分析（adk-go + eino）
+## 模块 1：AI 分析
 
 ### 职责
 把 STT 得到的转写文本交给 LLM，完成三件事：
@@ -25,7 +25,7 @@
 
 ### 目录 / 文件
 ```
-internal/service/ai.go        # AI 分析服务（adk-go + eino 编排）
+internal/service/ai.go        # AI 分析服务（chat/completions 两阶段编排）
 internal/model/extraction.go  # 提取结果 struct
 pkg/prompt/                   # prompt 模板集中管理（可选）
 ```
@@ -52,10 +52,13 @@ type Commitment struct {
 }
 
 type AnalysisResult struct {
-    IdentityID   string         `json:"identity_id,omitempty"`
-    Confidence   float64        `json:"confidence"`   // 0-1
+    IdentityID   *string        `json:"identity_id,omitempty"` // 未绑定身份时为 nil
+    Confidence   float64        `json:"confidence"`            // 0-1
     Extracted    ExtractedData  `json:"extracted"`
-    RawResponse  string         `json:"raw_response"`
+    Todos        []Todo         `json:"todos"`                 // 冗余便捷字段，同 Extracted.Todos
+    Commitments  []Commitment   `json:"commitments"`
+    Notes        []string       `json:"notes"`
+    RawResponse  string         `json:"raw_response"`          // workflow 模式下恒为空
 }
 ```
 
@@ -63,16 +66,16 @@ type AnalysisResult struct {
 ```go
 type AIService struct { ... }
 
-// Analyze 转写文本 + 用户身份列表 → 分析结果
-func (s *AIService) Analyze(ctx, transcript string, identities []model.Identity) (*AnalysisResult, error)
+// AnalyzeTranscript 转写文本 + 用户身份列表 → 分析结果
+func (s *AIService) AnalyzeTranscript(ctx context.Context, transcript string, identities []model.Identity) (*model.AnalysisResult, error)
 
-// 内部拆分为两个阶段（eino 编排）：
-//   1. 身份识别（分类，返回 identity_id + confidence）
+// 内部拆分为两个阶段（显式两阶段编排）：
+//   1. 身份识别（候选身份作为标签，返回 identity_id + confidence）
 //   2. 信息提取（结构化抽取，返回 todos/commitments/notes）
 ```
 
-### 编排要点（eino）
-- 用 eino 的 `Graph` 把「身份识别」和「信息提取」串成 pipeline，输出合并。
+### 编排要点
+- 用轻量 OpenAI 兼容 chat/completions 客户端（`net/http`）直接调用模型两次——先身份识别、再信息提取，各自独立解析 JSON。
 - 身份识别把用户已有身份列表作为候选标签传入，避免 LLM 自由发挥。
 - 提示词要求 JSON 输出，解析失败时重试一次，再失败则该会话标记 `confidence=0` 降级为未分类。
 - **置信度低于阈值（如 0.6）时**：不自动绑定身份，`identity_id` 留空，交给用户手动标注。
@@ -188,6 +191,19 @@ internal/model/reminder.go
 
 ## Phase 2 整体验收清单
 
-- [ ] AI 能识别身份并提取待办/承诺，低置信度降级不误绑。
-- [ ] 设备可绑定、心跳、解绑。
-- [ ] 待办/承诺自动生成提醒，身份切换有提醒。
+- [x] AI 能识别身份并提取待办/承诺，低置信度降级不误绑。
+- [x] 设备可绑定、心跳、解绑。
+- [x] 待办/承诺自动生成提醒，身份切换有提醒。
+
+---
+
+## 实现说明
+
+三个模块已落地并配齐单元测试 + e2e 测试（`go test -race ./...` 全部通过）：
+
+- **AI 分析**：`internal/service/ai.go` 基于轻量 OpenAI 兼容 chat/completions 客户端（`net/http`，配置项 `AI_API_KEY` / `AI_BASE_URL` / `AI_MODEL`）做显式两阶段编排——先身份识别（worker 拉取用户身份列表作为候选标签、返回 identity_id + confidence），再信息提取（todos/commitments/notes）。JSON 解析失败重试一次，再失败降级为 `confidence=0`、不绑定身份；置信度低于 `AI_CONFIDENCE_THRESHOLD`（默认 0.6）同样不绑定。提示词集中在 `pkg/prompt`。
+- **设备管理**：`internal/service/device.go` + `internal/repository/device.go` 实现绑定码（一次性、10 分钟有效）、绑定/解绑、心跳、指令落库；绑定返回一次性设备 token（仅存哈希）。
+- **提醒中心**：`internal/service/reminder.go` 依据分析结果自动生成 todo/commitment 提醒；身份相对上一条变化时生成 identity_switch 提醒并引用该身份下未完成待办。
+- 数据模型见 `backend/migrations/002_phase2.sql`（devices / device_bind_codes / device_commands / reminders）。
+
+> 注：文档早期标注的 adk-go + eino 框架未引入；实际采用轻量 OpenAI 兼容 chat/completions 客户端（`net/http`）做显式两阶段编排，兼顾低依赖与可测试性。后续如需 eino Graph 编排可平滑替换 `AIService` 内部实现而不改对外签名。

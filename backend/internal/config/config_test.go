@@ -39,6 +39,9 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Equal(t, 168*time.Hour, cfg.RefreshTokenTTL, "refresh token 默认 7 天")
 	assert.Equal(t, "https://api.stepfun.com/v1", cfg.StepFunBaseURL)
 	assert.Equal(t, "stepaudio-2.5-asr", cfg.StepFunSTTModel)
+	assert.Equal(t, "https://api.openai.com/v1", cfg.AIBaseURL)
+	assert.Equal(t, "gpt-4o-mini", cfg.AIModel)
+	assert.Equal(t, 0.6, cfg.AIConfidenceThreshold)
 	assert.Equal(t, int64(52428800), cfg.MaxAudioSize)
 	assert.Equal(t, 30, cfg.AudioRetentionDays)
 	assert.Equal(t, "info", cfg.LogLevel)
@@ -90,6 +93,9 @@ func TestLoadCustomValues(t *testing.T) {
 	t.Setenv("REFRESH_TOKEN_TTL", "2h")
 	t.Setenv("MAX_AUDIO_SIZE", "1024")
 	t.Setenv("ALLOWED_ORIGINS", "http://a.com,http://b.com")
+	t.Setenv("AI_BASE_URL", "https://llm.example.com/v1")
+	t.Setenv("AI_MODEL", "my-model")
+	t.Setenv("AI_CONFIDENCE_THRESHOLD", "0.8")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -100,4 +106,17 @@ func TestLoadCustomValues(t *testing.T) {
 	assert.Equal(t, 2*time.Hour, cfg.RefreshTokenTTL)
 	assert.Equal(t, int64(1024), cfg.MaxAudioSize)
 	assert.Equal(t, []string{"http://a.com", "http://b.com"}, cfg.AllowedOrigins)
+	assert.Equal(t, "https://llm.example.com/v1", cfg.AIBaseURL)
+	assert.Equal(t, "my-model", cfg.AIModel)
+	assert.Equal(t, 0.8, cfg.AIConfidenceThreshold)
+}
+
+func TestLoadInvalidAIConfidenceThreshold(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("DATABASE_DSN", "user:pass@tcp(localhost:3306)/pulse")
+	t.Setenv("AI_CONFIDENCE_THRESHOLD", "high")
+
+	_, err := Load()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "AI_CONFIDENCE_THRESHOLD")
 }
