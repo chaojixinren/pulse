@@ -146,3 +146,9 @@ Icon
 # Windows
 $RECYCLE.BIN/
 *.lnk
+
+# Go local module/build caches
+.gomodcache/
+.go/
+.go-build-cache/
+.gopath/

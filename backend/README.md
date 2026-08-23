@@ -10,7 +10,7 @@
 - **STT 服务**：StepFun StepAudio-2.5-ASR
 - **数据库**：MySQL 8.0+
 - **缓存**：Redis 7+
-- **对象存储**：七牛云
+- **音频存储**：MySQL（音频二进制存于 audio_sessions 表）
 
 ## 项目结构
 
@@ -27,7 +27,7 @@ backend/
 │   │   └── report.go     # 报告生成
 │   ├── service/          # 业务逻辑
 │   │   ├── ai.go         # AI 分析服务 (adk-go + eino)
-│   │   └── storage.go    # 存储服务
+│   │   └── stt.go        # STT 转写
 │   ├── model/            # 数据模型
 │   │   ├── user.go
 │   │   ├── identity.go
@@ -66,12 +66,6 @@ GIN_MODE=debug
 # 数据库
 DATABASE_DSN=user:password@tcp(localhost:3306)/pulse?charset=utf8mb4&parseTime=True&loc=Local
 REDIS_URL=redis://localhost:6379
-
-# 对象存储（七牛云）
-QINIU_ACCESS_KEY=your_qiniu_access_key
-QINIU_SECRET_KEY=your_qiniu_secret_key
-QINIU_BUCKET=pulse-audio
-QINIU_DOMAIN=your-bucket-domain.com
 
 # AI 服务 (adk-go + eino)
 AI_API_KEY=your_ai_api_key
