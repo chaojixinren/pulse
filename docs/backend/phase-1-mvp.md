@@ -1,6 +1,6 @@
 # Phase 1：MVP 开发文档
 
-> **目标**：跑通「硬件上传音频 → 七牛云存储 → STT 转写 → 前端时间线查看」的最小闭环。
+> **目标**：跑通「硬件上传音频 → MySQL 存储 → STT 转写 → 前端时间线查看」的最小闭环。
 > **完成标志**：硬件上传的音频能被转写，并在前端时间线按身份查看。
 
 ## 模块依赖关系
@@ -38,10 +38,6 @@ type Config struct {
     GINMode     string
     MySQLDSN    string
     RedisURL    string
-    QiniuAccessKey string
-    QiniuSecretKey string
-    QiniuBucket    string
-    QiniuDomain    string
     StepFunAPIKey  string
     StepFunBaseURL string
     JWTSecret      string
@@ -135,38 +131,28 @@ type TokenPair struct {
 
 ---
 
-## 模块 3：音频上传 + 七牛云存储
+## 模块 3：音频上传 + MySQL 存储
 
 ### 职责
-接收硬件上传的音频文件，校验格式，上传到七牛云，返回音频访问地址，并创建语音会话记录。
+接收硬件上传的音频文件，校验格式，把音频二进制直接写入 MySQL，并创建语音会话记录。
 
 ### 目录 / 文件
 ```
 internal/api/audio.go
 internal/service/audio.go
-internal/service/storage.go    # 七牛云封装（上传/下载/删除/签名 URL）
 internal/model/audio_session.go
 ```
 
-### storage 接口签名
-```go
-// service/storage.go
-type StorageService struct { ... }
-
-func NewStorageService(cfg) *StorageService
-func (s *StorageService) Upload(ctx, key string, data []byte) (url string, err error)
-func (s *StorageService) Download(ctx, key string) ([]byte, error)
-func (s *StorageService) Delete(ctx, key string) error
-// Phase 3 增加：UploadEncrypted / DownloadDecrypted
-```
+### 存储方式
+音频二进制不经过对象存储，由 `AudioSessionRepo.Create` 直接写入 `audio_sessions.audio_data`（LONGBLOB）；转写时 worker 从该字段读取字节。Phase 3 在落库前增加 AES-256-GCM 加密（见 phase-3-production.md）。
 
 ### 上传流程
 ```
 1. 从 multipart 取 file，读 header 参数：device_id、duration、recorded_at
 2. 校验文件格式（WAV/MP3/M4A）与大小上限
-3. 生成 session_id（UUID），构造七牛云 key：audio/{user_id}/{session_id}.wav
-4. 读入字节 → storage.Upload 上传七牛云 → 得到访问 URL
-5. 创建 audio_session 记录（status=pending）
+3. 生成 session_id（UUID），推断 audio_mime（audio/wav、audio/mpeg 等）
+4. 读入字节 → AudioSessionRepo.Create 写入 audio_sessions.audio_data
+5. 创建 audio_session 记录（status=pending），进入异步转写队列
 6. 同步返回 session_id
 ```
 
@@ -176,9 +162,9 @@ func (s *StorageService) Delete(ctx, key string) error
 | POST | /api/v1/audio/upload | multipart 上传音频（需认证） |
 
 ### 验收标准
-- [ ] 上传成功返回 session_id，七牛云空间里能查到对应文件。
-- [ ] 非法格式 / 超大文件返回 400，不落库不上传。
-- [ ] 上传失败（七牛云异常）返回 5xx，且不产生孤儿记录。
+- [ ] 上传成功返回 session_id，audio_sessions.audio_data 中能查到对应音频二进制。
+- [ ] 非法格式 / 超大文件返回 400，不落库。
+- [ ] 落库失败返回 5xx，且不产生孤儿记录。
 
 ---
 
@@ -194,7 +180,8 @@ CREATE TABLE audio_sessions (
     user_id CHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     identity_id CHAR(36) REFERENCES identities(id) ON DELETE SET NULL,
     device_id VARCHAR(100),
-    audio_url TEXT NOT NULL,
+    audio_data LONGBLOB NOT NULL,      -- 音频二进制
+    audio_mime VARCHAR(100) NULL,
     transcript TEXT,
     duration INTEGER NOT NULL,              -- 秒
     file_size BIGINT,                       -- 字节
@@ -236,7 +223,7 @@ func (r *AudioSessionRepo) ListByUser(ctx, userID string, filter Filter, page, s
 ## 模块 5：STT 转写
 
 ### 职责
-封装 StepFun StepAudio-2.5-ASR，把七牛云上的音频转为文本，回写会话记录。
+封装 StepFun StepAudio-2.5-ASR，把 MySQL 中的音频二进制转为文本，回写会话记录。
 
 ### 目录 / 文件
 ```
@@ -248,15 +235,15 @@ internal/worker/audio_processor.go   # 异步：拉取 pending 会话 → 转写
 ```go
 type SttService struct { ... }
 
-// Transcribe 音频 URL → 转写文本
-func (s *SttService) Transcribe(ctx, audioURL string) (text string, err error)
+// Transcribe 音频字节 → 转写文本
+func (s *SttService) Transcribe(ctx, data []byte, filename string) (text string, err error)
 ```
 
 ### 处理流程（异步 worker）
 ```
 1. 定时/轮询取 status=pending 的会话（单 worker 轮询 DB）
 2. 置 status=processing
-3. 调 stt.Transcribe(audio_url)
+3. 读 audio_data，调 stt.Transcribe(bytes, filename)
 4. 成功：写 transcript，置 completed；失败：置 failed + error_message
 5. 结果写 Redis 缓存（key: session:{id}）
 ```
@@ -370,11 +357,38 @@ type DailyReport struct {
 
 ---
 
+## 验收结论（自动化测试逐项核对）
+
+> 执行 `cd backend && go test ./...`，共 **99** 项测试断言全部通过（0 失败）。
+> 测试分层：**单元测试**（model/pkg 纯逻辑）、**集成测试**（repository/service 用 go-sqlmock 模拟 MySQL，STT 用 httptest 假服务）、**E2E**（httptest 全路由；另有 `//go:build e2e` 的 `test/e2e_live_test.go` 面向真实 MySQL/Redis，需设置 `TEST_DATABASE_DSN`/`TEST_REDIS_URL`）。
+
+| 模块 | 验收标准 | 结果 | 对应测试 |
+|------|---------|------|---------|
+| 1 骨架 | /health 200、.env 缺失明确报错、zap 请求日志 | ✅ | `TestE2EHealth` / `TestLoadMissingEnv` / `middleware.Logger` |
+| 2 认证 | bcrypt 不存明文、401、refresh 续期、logout 失效 | ✅ | `TestAuthRegister` / `TestAuthMiddleware*` / `TestAuthRefresh` / `TestAuthLogout` |
+| 3 上传+存储 | 格式(魔数)/大小校验、落库 MySQL、返回 session_id | ✅ | `TestAudioUpload*` / `TestDetectAudioExt` / `TestE2EUploadTimelineReport` |
+| 4 状态机 | 合法流转、error_message、updated_at | ✅ | `TestCanTransition` / `TestAudioSessionRepoUpdateStatus*` |
+| 5 STT | completed+transcript、失败置 failed 可重试 | ✅ | `worker.TestAudioProcessor*` / `TestSttTranscribe*` / `TestAudioRetry` |
+| 6 身份 | 唯一默认、禁删默认 | ✅ | `TestIdentity*` / `TestE2EIdentityCRUD` |
+| 7 时间线 | 倒序分页、过滤、只返回本人数据 | ✅ | `TestTimeline*` / `TestAudioSessionRepoListByUser` |
+| 8 日报 | 空报告、统计正确 | ✅ | `TestReportDaily*` |
+
+### 已修复的验收发现
+
+以下 4 项已在本阶段修复并有测试覆盖：
+
+1. **`JWT_EXPIRES_IN` 现在作用于 access token**：默认 `1h`；新增 `REFRESH_TOKEN_TTL`（默认 `168h`）用于 refresh token，`service/issueTokens` 直接读取配置（`.env.example` 已同步）。测试：`TestAuthAccessTokenUsesConfigTTL`。
+2. **重试流转**：改为 `failed → processing`（与状态机一致），worker 通过 `ListProcessable`（pending + processing）认领重试任务。测试：`TestAudioRetry/failed_transitions_to_processing`、`TestAudioSessionRepoListProcessable`。
+3. **音频格式魔数校验**：上传时按文件头魔数识别 WAV/MP3/M4A，内容与扩展名不符返回 400。测试：`TestDetectAudioExt`、`TestAudioUploadContentExtensionMismatch`。
+4. **`recorded_at` 非法**：解析失败返回 400，不再静默回退。测试：`TestE2EUploadInvalidRecordedAt`。
+
+---
+
 ## Phase 1 整体验收清单
 
-- [ ] `/health` 正常，能连 MySQL + Redis。
-- [ ] 用户可注册/登录，受保护接口需 JWT。
-- [ ] 硬件可上传音频，七牛云有文件，返回 session_id。
-- [ ] 音频自动转写为文本，会话状态为 completed。
-- [ ] 用户可管理身份，时间线按身份/时间查看转写文本。
-- [ ] 日报返回当日统计。
+- [x] `/health` 正常，能连 MySQL + Redis。
+- [x] 用户可注册/登录，受保护接口需 JWT。
+- [x] 硬件可上传音频，返回 session_id。
+- [x] 音频自动转写为文本，会话状态为 completed。
+- [x] 用户可管理身份，时间线按身份/时间查看转写文本。
+- [x] 日报返回当日统计。

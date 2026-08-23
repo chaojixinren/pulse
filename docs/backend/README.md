@@ -10,14 +10,14 @@
 - **STT**：StepFun StepAudio-2.5-ASR
 - **数据库**：MySQL 8.0+（主数据）
 - **缓存**：Redis 7+（会话、热点数据）
-- **对象存储**：七牛云（语音文件）
+- **音频存储**：MySQL（音频二进制存于 audio_sessions 表）
 - **认证**：JWT
 
 ## 阶段总览
 
 | 阶段 | 目标 | 核心模块 | 完成标志 |
 |------|------|----------|----------|
-| [Phase 1：MVP](phase-1-mvp.md) | 跑通「上传音频 → 转写 → 查看」最小闭环 | 骨架、认证、音频上传、七牛云存储、语音会话、STT 转写、身份、时间线、日报 | 硬件上传的音频能被转写并在前端时间线查看 |
+| [Phase 1：MVP](phase-1-mvp.md) | 跑通「上传音频 → 转写 → 查看」最小闭环 | 骨架、认证、音频上传、MySQL 存储、语音会话、STT 转写、身份、时间线、日报 | 硬件上传的音频能被转写并在前端时间线查看 |
 | [Phase 2：AI 增强](phase-2-ai.md) | 从转写文本提取结构化信息并推送提醒 | AI 分析（身份识别/信息提取）、设备管理、提醒中心 | 系统能自动识别身份、提取待办/承诺并提醒 |
 | [Phase 3：生产化](phase-3-production.md) | 达到可上线标准 | 报告增强、加密存储、数据删除/导出、限流配额、可观测性、部署 | 通过安全检查，可灰度上线 |
 
@@ -42,7 +42,6 @@ backend/
 │   ├── service/                 # 业务逻辑层
 │   │   ├── auth.go
 │   │   ├── audio.go
-│   │   ├── storage.go           # 七牛云封装
 │   │   ├── stt.go               # StepFun STT 封装
 │   │   ├── ai.go                # adk-go + eino 编排
 │   │   ├── identity.go
@@ -92,7 +91,6 @@ backend/
 ```
 HTTP 请求 → api(handler) → service(业务逻辑) → repository(数据访问) → MySQL
                                   │
-                                  ├→ storage(七牛云)
                                   ├→ stt(StepFun)
                                   └→ ai(adk-go + eino)
 
@@ -100,7 +98,7 @@ HTTP 请求 → api(handler) → service(业务逻辑) → repository(数据访�
 ```
 
 - **api 层**：只做参数解析、校验、调用 service、返回统一响应；不写业务逻辑。
-- **service 层**：核心业务逻辑、事务边界、调用外部服务（storage/stt/ai）。
+- **service 层**：核心业务逻辑、事务边界、调用外部服务（stt/ai）。
 - **repository 层**：纯 SQL 访问，不掺业务判断。
 - **model 层**：struct 定义，对应数据库表。
 
@@ -138,7 +136,7 @@ type Response struct {
 |------|------|----------|------|
 | 项目骨架 | 1 | cmd、config、pkg/logger、pkg/response | 无 |
 | 认证 | 1 | api/auth、service/auth、model/user、model/refresh_token | 骨架 |
-| 音频上传 + 存储 | 1 | api/audio、service/storage、七牛云 | 认证、骨架 |
+| 音频上传 + 存储 | 1 | api/audio、service/audio、MySQL（audio_data） | 认证、骨架 |
 | 语音会话状态机 | 1 | model/audio_session、repository/audio_session | 骨架 |
 | STT 转写 | 1 | service/stt、worker/audio_processor | 会话、存储 |
 | 身份管理 | 1 | api/identity、service/identity、model/identity | 认证 |
@@ -148,7 +146,7 @@ type Response struct {
 | 设备管理 | 2 | api/device、service/device、model/device | 认证 |
 | 提醒中心 | 2 | api/reminder、service/reminder、model/reminder | AI 分析 |
 | 报告增强 | 3 | service/report | 时间线、AI |
-| 加密存储 | 3 | service/storage | 存储 |
+| 加密存储 | 3 | service/audio | 存储 |
 | 数据删除/导出 | 3 | api/export、service/export | 各模块 |
 | 限流配额 | 3 | middleware/ratelimit | 认证 |
 | 可观测性 | 3 | pkg/logger、middleware | 骨架 |

@@ -152,6 +152,7 @@ $RECYCLE.BIN/
 .go/
 .go-build-cache/
 .gopath/
+.gocache/
 
 # Go compiled binaries
 backend/pulse-backend

@@ -10,7 +10,7 @@
 | 模块 | 依赖 | 说明 |
 |------|------|------|
 | 1 报告增强 | Phase1 时间线 + Phase2 AI | 周报、统计图表 |
-| 2 加密存储 | Phase1 storage | 音频 AES-256 加密 |
+| 2 加密存储 | Phase1 音频上传 | 音频 AES-256 加密 |
 | 3 数据删除/导出 | 各模块 | 合规（GDPR/个保法） |
 | 4 限流配额 | 认证 | 防刷、配额 |
 | 5 可观测性 | 骨架 | 日志、trace、指标 |
@@ -56,20 +56,20 @@ type WeeklyReport struct {
 ## 模块 2：加密存储
 
 ### 职责
-音频文件在七牛云**服务端加密**存储，上传前 AES-256-GCM 加密，下载时解密。
+音频二进制在 MySQL 中**加密存储**，写入前 AES-256-GCM 加密，读取时解密。
 
 ### 目录 / 文件
 ```
-internal/service/storage.go    # 增加 UploadEncrypted / DownloadDecrypted
+internal/service/audio.go      # 落库前加密 / 读取时解密
 ```
 
 ### 接口签名
 ```go
-// 加密上传（Phase 3 替代普通 Upload）
-func (s *StorageService) UploadEncrypted(ctx, key string, data []byte) (url string, err error)
+// 落库前加密（Phase 3 在 AudioService.Upload 中调用）
+func encryptAudio(data []byte, key []byte) ([]byte, error)
 
-// 下载并解密
-func (s *StorageService) DownloadDecrypted(ctx, key string) ([]byte, error)
+// 读取时解密
+func decryptAudio(data []byte, key []byte) ([]byte, error)
 ```
 
 ### 加密方案
@@ -77,12 +77,12 @@ func (s *StorageService) DownloadDecrypted(ctx, key string) ([]byte, error)
 - 密钥管理：生产环境用 KMS/环境变量注入，**密钥不入库、不硬编码**。
 - 每个用户或每个文件可用独立数据加密密钥（DEK），主密钥（KEK）管理 DEK（进阶，可先全局单密钥）。
 
-### 七牛云侧
-- 使用七牛云私有空间（非公开读），下载走签名 URL（`PrivateDownloadURL`）。
-- 上传用 `PutPolicy` + `UploadToken`。
+### 存储侧
+- 加密后的密文写入 `audio_sessions.audio_data`（LONGBLOB），不再以明文落库。
+- 转写 worker 读取后先解密再提交 StepFun。
 
 ### 验收标准
-- [ ] 七牛云上存储的是密文，直接下载无法播放。
+- [ ] audio_data 中存储的是密文，直接读取无法播放。
 - [ ] 后端解密后可正常 STT 转写。
 - [ ] 密钥不落库、不硬编码在代码中。
 
@@ -98,11 +98,11 @@ func (s *StorageService) DownloadDecrypted(ctx, key string) ([]byte, error)
 |------|------|------|
 | GET    | /api/v1/export | 导出用户全部数据（打包返回） |
 | DELETE | /api/v1/account | 注销账号（软删用户 + 异步清理数据） |
-| DELETE | /api/v1/audio/:id | 删除单条语音（含七牛云文件） |
+| DELETE | /api/v1/audio/:id | 删除单条语音（含音频二进制） |
 
 ### 删除策略
 1. 用户注销 → 软删用户（deleted_at），立即阻断登录。
-2. 异步任务清理：删除七牛云音频文件、删除/匿名化转写文本、删除身份与提醒。
+2. 异步任务清理：删除 audio_data 音频二进制、删除/匿名化转写文本、删除身份与提醒。
 3. 保留审计日志（匿名化），满足「已删除」证明。
 
 ### 导出策略
@@ -112,7 +112,7 @@ func (s *StorageService) DownloadDecrypted(ctx, key string) ([]byte, error)
 ### 验收标准
 - [ ] 注销后无法登录，数据异步清理完成。
 - [ ] 导出包包含用户全部数据，格式可读。
-- [ ] 删除单条语音同时清理七牛云文件，不产生孤儿文件。
+- [ ] 删除单条语音同时清理音频二进制，不产生孤儿数据。
 
 ---
 
@@ -215,4 +215,4 @@ services:
 - [ ] 越权访问防护（所有查询带 user_id 过滤）。
 - [ ] 敏感日志脱敏（不打印完整转写文本/密钥）。
 - [ ] 数据库备份与恢复演练。
-- [ ] 第三方（StepFun/七牛云）密钥不硬编码。
+- [ ] 第三方（StepFun）密钥不硬编码。

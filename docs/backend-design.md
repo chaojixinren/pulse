@@ -28,19 +28,20 @@
 │  └──────────────┴──────────────┴──────────────────────────┘ │
 └──────────────────────┬──────────────────────────────────────┘
                        │
-       ┌───────────────┼───────────────┬─────────────────┐
-       │               │               │                 │
-       ↓               ↓               ↓                 ↓
-┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌──────────────┐
-│    MySQL    │ │   Redis     │ │   七牛云     │ │  AI Service  │
-│  (主数据库)  │ │   (缓存)    │ │  (语音存储)  │ │(adk-go+eino) │
-└─────────────┘ └─────────────┘ └─────────────┘ └──────────────┘
-                                                       │
-                                                       ↓
-                                              ┌──────────────────┐
-                                              │  StepFun STT API │
-                                              │ (StepAudio-2.5)  │
-                                              └──────────────────┘
+       ┌──────────────┬──────────────┬──────────────┐
+       │              │              │              │
+       ↓              ↓              ↓
+┌─────────────┐ ┌─────────────┐ ┌──────────────┐
+│    MySQL    │ │   Redis     │ │  AI Service  │
+│  (主数据库)  │ │   (缓存)    │ │(adk-go+eino) │
+│  (含音频)    │ │             │ │              │
+└─────────────┘ └─────────────┘ └──────┬───────┘
+                                       │
+                                       ↓
+                              ┌──────────────────┐
+                              │  StepFun STT API │
+                              │ (StepAudio-2.5)  │
+                              └──────────────────┘
 ```
 
 ### 1.2 分层架构
@@ -66,7 +67,7 @@
 │        Infrastructure Layer             │  基础设施
 │  - Database (MySQL)                     │
 │  - Cache (Redis)                        │
-│  - Storage (七牛云)                      │
+│  - Storage (MySQL LONGBLOB)             │
 │  - AI Client (adk-go + eino)            │
 └─────────────────────────────────────────┘
 ```
@@ -80,7 +81,7 @@
 
 #### 1.3.2 语音处理模块 (Audio)
 - 语音文件上传
-- 七牛云存储
+- MySQL 存储（audio_data LONGBLOB）
 - STT 转换（StepFun API）
 - 语音会话管理
 
@@ -179,7 +180,6 @@ recorded_at: "2024-08-23T10:00:00Z"
 Response 201:
 {
   "session_id": "uuid",
-  "audio_url": "https://cdn.pulse.example.com/audio.wav",
   "status": "processing",
   "created_at": "2024-08-23T10:00:00Z"
 }
@@ -194,7 +194,7 @@ Response 200:
 {
   "id": "uuid",
   "user_id": "uuid",
-  "audio_url": "https://cdn.pulse.example.com/audio.wav",
+  "audio_mime": "audio/wav",
   "transcript": "今天需要完成项目报告...",
   "duration": 120,
   "status": "completed",
@@ -429,7 +429,8 @@ CREATE TABLE audio_sessions (
     user_id CHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     identity_id CHAR(36) REFERENCES identities(id) ON DELETE SET NULL,
     device_id VARCHAR(100),
-    audio_url TEXT NOT NULL,
+    audio_data LONGBLOB NOT NULL, -- 音频二进制
+    audio_mime VARCHAR(100) NULL,
     transcript TEXT,
     duration INTEGER NOT NULL, -- 秒
     file_size BIGINT, -- 字节
@@ -605,11 +606,11 @@ func NewAIService(apiKey, baseURL string) (*AIService, error) {
 }
 
 // TranscribeAudio 语音转文字
-func (s *AIService) TranscribeAudio(ctx context.Context, audioURL string) (string, error) {
+func (s *AIService) TranscribeAudio(ctx context.Context, audioData []byte) (string, error) {
     req := adk.STTRequest{
-        AudioURL: audioURL,
-        Model:    "stepfun/stepaudio-2.5-asr",
-        Language: "zh",
+        AudioData: audioData,
+        Model:     "stepfun/stepaudio-2.5-asr",
+        Language:  "zh",
     }
 
     resp, err := s.adkClient.STT(ctx, req)
@@ -747,7 +748,7 @@ import (
 )
 
 // ProcessAudioWorkflow 完整的语音处理工作流
-func (s *AIService) ProcessAudioWorkflow(ctx context.Context, audioURL string, userIdentities []model.Identity) (*WorkflowResult, error) {
+func (s *AIService) ProcessAudioWorkflow(ctx context.Context, audioData []byte, userIdentities []model.Identity) (*WorkflowResult, error) {
     // 定义工作流
     workflow := flow.NewFlow(
         flow.WithContext(ctx),
@@ -756,7 +757,7 @@ func (s *AIService) ProcessAudioWorkflow(ctx context.Context, audioURL string, u
             flow.Step{
                 Name: "transcribe",
                 Func: func(ctx context.Context, input flow.Input) (flow.Output, error) {
-                    transcript, err := s.TranscribeAudio(ctx, input.Get("audio_url").(string))
+                    transcript, err := s.TranscribeAudio(ctx, input.Get("audio_data").([]byte))
                     return flow.Output{"transcript": transcript}, err
                 },
             },
@@ -783,7 +784,7 @@ func (s *AIService) ProcessAudioWorkflow(ctx context.Context, audioURL string, u
 
     // 执行工作流
     result, err := workflow.Run(flow.Input{
-        "audio_url": audioURL,
+        "audio_data": audioData,
     })
     if err != nil {
         return nil, err
@@ -819,7 +820,7 @@ type WorkflowResult struct {
 │  1. 验证用户认证                         │
 │  2. 验证文件格式 (WAV/MP3/M4A)           │
 │  3. 生成唯一 session_id                 │
-│  4. 上传文件到七牛云                      │
+│  4. 写入音频到 MySQL（audio_data）      │
 │  5. 创建 audio_session 记录 (pending)   │
 │  6. 返回 session_id                     │
 └────┬────────────────────────────────────┘
@@ -861,6 +862,7 @@ type WorkflowResult struct {
 package api
 
 import (
+    "io"
     "net/http"
     "time"
 
@@ -871,7 +873,6 @@ import (
 
 type AudioHandler struct {
     audioService   *service.AudioService
-    storageService *service.StorageService
 }
 
 func (h *AudioHandler) UploadAudio(c *gin.Context) {
@@ -898,10 +899,16 @@ func (h *AudioHandler) UploadAudio(c *gin.Context) {
     // 4. 生成 session ID
     sessionID := uuid.New()
 
-    // 5. 上传到七牛云
-    audioURL, err := h.storageService.Upload(c.Request.Context(), file, sessionID.String())
+    // 5. 读入音频字节（直接落库 MySQL，不经过对象存储）
+    src, err := file.Open()
     if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "存储失败"})
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "读取文件失败"})
+        return
+    }
+    defer src.Close()
+    audioData, err := io.ReadAll(src)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "读取文件失败"})
         return
     }
 
@@ -910,7 +917,7 @@ func (h *AudioHandler) UploadAudio(c *gin.Context) {
         ID:         sessionID,
         UserID:     uuid.MustParse(userID),
         DeviceID:   deviceID,
-        AudioURL:   audioURL,
+        AudioData:  audioData,
         Duration:   parseDuration(duration),
         FileSize:   file.Size,
         Status:     "pending",
@@ -928,7 +935,6 @@ func (h *AudioHandler) UploadAudio(c *gin.Context) {
     // 8. 返回结果
     c.JSON(http.StatusCreated, gin.H{
         "session_id": sessionID,
-        "audio_url":  audioURL,
         "status":     "processing",
         "created_at": time.Now(),
     })
@@ -987,7 +993,7 @@ func (s *AudioService) ProcessAudioAsync(sessionID uuid.UUID) {
     }
 
     // 3. 调用 STT
-    transcript, err := s.aiService.TranscribeAudio(ctx, session.AudioURL)
+    transcript, err := s.aiService.TranscribeAudio(ctx, session.AudioData)
     if err != nil {
         s.handleProcessError(ctx, session, err)
         return
@@ -1288,86 +1294,23 @@ func UserRateLimitMiddleware(r *redis.Client, maxRequests int, window time.Durat
 #### 语音文件加密存储
 
 ```go
-// internal/service/storage_service.go
+// internal/service/audio.go
 package service
 
 import (
-    "bytes"
-    "context"
     "crypto/aes"
     "crypto/cipher"
     "crypto/rand"
     "fmt"
     "io"
-    "net/http"
-    "time"
-
-    "github.com/qiniu/go-sdk/v7/auth/qbox"
-    "github.com/qiniu/go-sdk/v7/storage"
 )
 
-type StorageService struct {
-    mac           *qbox.Mac
-    bucket        string
-    domain        string // 七牛云绑定域名
-    encryptionKey []byte // 32 bytes for AES-256
-}
+// 加密后的密文直接写入 audio_sessions.audio_data（LONGBLOB），不经过对象存储。
+// 转写 worker 读取后先 decryptAudio 再提交 StepFun。
 
-// UploadEncrypted 加密上传文件到七牛云
-func (s *StorageService) UploadEncrypted(ctx context.Context, data []byte, key string) (string, error) {
-    // 1. 加密数据
-    encryptedData, err := s.encrypt(data)
-    if err != nil {
-        return "", err
-    }
-
-    // 2. 上传到七牛云
-    putPolicy := storage.PutPolicy{
-        Scope: fmt.Sprintf("%s:%s", s.bucket, key),
-    }
-    upToken := putPolicy.UploadToken(s.mac)
-    formUploader := storage.NewFormUploader(&storage.Config{})
-    ret := storage.PutRet{}
-    err = formUploader.Put(ctx, &ret, upToken, key, bytes.NewReader(encryptedData), int64(len(encryptedData)), &storage.PutExtra{})
-    if err != nil {
-        return "", err
-    }
-
-    // 3. 返回访问地址
-    url := fmt.Sprintf("https://%s/%s", s.domain, key)
-    return url, nil
-}
-
-// DownloadDecrypted 下载并解密文件
-func (s *StorageService) DownloadDecrypted(ctx context.Context, key string) ([]byte, error) {
-    // 1. 生成七牛云私有空间下载地址
-    bucketManager := storage.NewBucketManager(s.mac, &storage.Config{})
-    deadline := time.Now().Add(1 * time.Hour).Unix()
-    url := bucketManager.PrivateDownloadURL(s.domain, key, deadline)
-
-    // 2. 下载文件
-    req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-    if err != nil {
-        return nil, err
-    }
-    resp, err := http.DefaultClient.Do(req)
-    if err != nil {
-        return nil, err
-    }
-    defer resp.Body.Close()
-
-    encryptedData, err := io.ReadAll(resp.Body)
-    if err != nil {
-        return nil, err
-    }
-
-    // 3. 解密数据
-    return s.decrypt(encryptedData)
-}
-
-// encrypt 使用 AES-256-GCM 加密
-func (s *StorageService) encrypt(plaintext []byte) ([]byte, error) {
-    block, err := aes.NewCipher(s.encryptionKey)
+// encryptAudio 使用 AES-256-GCM 加密
+func encryptAudio(plaintext []byte, key []byte) ([]byte, error) {
+    block, err := aes.NewCipher(key)
     if err != nil {
         return nil, err
     }
@@ -1386,9 +1329,9 @@ func (s *StorageService) encrypt(plaintext []byte) ([]byte, error) {
     return ciphertext, nil
 }
 
-// decrypt 解密
-func (s *StorageService) decrypt(ciphertext []byte) ([]byte, error) {
-    block, err := aes.NewCipher(s.encryptionKey)
+// decryptAudio 解密
+func decryptAudio(ciphertext []byte, key []byte) ([]byte, error) {
+    block, err := aes.NewCipher(key)
     if err != nil {
         return nil, err
     }
@@ -1482,10 +1425,7 @@ services:
       - DATABASE_DSN=pulse:password@tcp(mysql:3306)/pulse?charset=utf8mb4&parseTime=True&loc=Local
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET}
-      - QINIU_ACCESS_KEY=${QINIU_ACCESS_KEY}
-      - QINIU_SECRET_KEY=${QINIU_SECRET_KEY}
-      - QINIU_BUCKET=${QINIU_BUCKET}
-      - QINIU_DOMAIN=${QINIU_DOMAIN}
+
     depends_on:
       - mysql
       - redis
@@ -1525,11 +1465,7 @@ GIN_MODE=release
 DATABASE_DSN=user:pass@tcp(host:3306)/pulse?charset=utf8mb4&parseTime=True&loc=Local
 REDIS_URL=redis://:password@host:6379/0
 
-# 对象存储（七牛云）
-QINIU_ACCESS_KEY=your_qiniu_access_key
-QINIU_SECRET_KEY=your_qiniu_secret_key
-QINIU_BUCKET=pulse-production
-QINIU_DOMAIN=cdn.pulse.example.com
+# 音频存储在 MySQL（audio_sessions.audio_data），无需对象存储
 
 # AI 服务
 AI_API_KEY=your_adk_api_key
