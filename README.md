@@ -43,28 +43,24 @@ Pulse/
 
 ```bash
 cd backend
-npm install  # 或 pip install -r requirements.txt
+go mod download
 cp .env.example .env
-# 配置环境变量（数据库、API keys 等）
-npm run dev
+# 配置环境变量（数据库、Redis、API keys 等）
+go run cmd/server/main.go
 ```
 
 #### 2. 前端 App
 
 ```bash
 cd frontend
-flutter pub get
-flutter run
+npm install
+# 配置环境变量（创建 .env 文件）
+npm run dev
 ```
 
 #### 3. 硬件设备
 
-```bash
-cd hardware
-# 使用 PlatformIO 或 Arduino IDE 打开项目
-# 配置 WiFi 凭据
-# 上传代码到 ESP32 设备
-```
+硬件技术栈待定，暂不开发。
 
 详细文档请查看各模块的 README。
 
