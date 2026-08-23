@@ -1,0 +1,145 @@
+# General
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Backend (Node.js)
+backend/node_modules/
+backend/dist/
+backend/build/
+backend/.npm
+backend/.eslintcache
+backend/coverage/
+
+# Frontend (Flutter)
+frontend/.dart_tool/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/.packages
+frontend/.pub-cache/
+frontend/.pub/
+frontend/build/
+frontend/ios/Pods/
+frontend/ios/.symlinks/
+frontend/ios/Flutter/Flutter.framework
+frontend/ios/Flutter/Flutter.podspec
+frontend/android/.gradle/
+frontend/android/.idea/
+frontend/android/local.properties
+frontend/android/app/debug/
+frontend/android/app/profile/
+frontend/android/app/release/
+frontend/pubspec.lock
+
+# Hardware (ESP32/PlatformIO)
+hardware/firmware/.pio/
+hardware/firmware/.vscode/
+hardware/firmware/.pioenvs/
+hardware/firmware/.piolibdeps/
+hardware/firmware/lib/readme.txt
+hardware/firmware/.clang_complete
+hardware/firmware/.gcc-flags.json
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# OS specific
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Compiled files
+*.pyc
+*.pyo
+*.class
+*.o
+*.so
+*.dylib
+
+# Documentation build
+docs/_build/
+docs/.doctrees/
+
+# IDE
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.settings/
+
+# Testing
+coverage/
+.nyc_output/
+*.cover
+.coverage
+htmlcov/
+
+# Dependencies
+bower_components/
+vendor/
+
+# Build artifacts
+dist/
+out/
+target/
+
+# Certificates and keys (IMPORTANT: never commit these!)
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+
+# Cloud provider configs (can contain sensitive data)
+.aws/
+.gcloud/
+terraform.tfstate
+terraform.tfstate.backup
+
+# User data (for local development)
+uploads/
+audio_files/
+backups/
+
+# Mac
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Linux
+.Trash-*
+.nfs*
+
+# Windows
+$RECYCLE.BIN/
+*.lnk
