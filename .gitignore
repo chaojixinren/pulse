@@ -152,3 +152,8 @@ $RECYCLE.BIN/
 .go/
 .go-build-cache/
 .gopath/
+
+# Go compiled binaries
+backend/pulse-backend
+backend/server
+backend/migrate
