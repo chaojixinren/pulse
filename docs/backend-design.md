@@ -32,7 +32,7 @@
        │               │               │                 │
        ↓               ↓               ↓                 ↓
 ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌──────────────┐
-│  PostgreSQL │ │   Redis     │ │    S3/OSS   │ │  AI Service  │
+│    MySQL    │ │   Redis     │ │   七牛云     │ │  AI Service  │
 │  (主数据库)  │ │   (缓存)    │ │  (语音存储)  │ │(adk-go+eino) │
 └─────────────┘ └─────────────┘ └─────────────┘ └──────────────┘
                                                        │
@@ -64,9 +64,9 @@
 │  - IdentityRepository                   │
 ├─────────────────────────────────────────┤
 │        Infrastructure Layer             │  基础设施
-│  - Database (PostgreSQL)                │
+│  - Database (MySQL)                     │
 │  - Cache (Redis)                        │
-│  - Storage (S3/OSS)                     │
+│  - Storage (七牛云)                      │
 │  - AI Client (adk-go + eino)            │
 └─────────────────────────────────────────┘
 ```
@@ -80,7 +80,7 @@
 
 #### 1.3.2 语音处理模块 (Audio)
 - 语音文件上传
-- S3/OSS 存储
+- 七牛云存储
 - STT 转换（StepFun API）
 - 语音会话管理
 
@@ -179,7 +179,7 @@ recorded_at: "2024-08-23T10:00:00Z"
 Response 201:
 {
   "session_id": "uuid",
-  "audio_url": "https://s3.../audio.wav",
+  "audio_url": "https://cdn.pulse.example.com/audio.wav",
   "status": "processing",
   "created_at": "2024-08-23T10:00:00Z"
 }
@@ -194,7 +194,7 @@ Response 200:
 {
   "id": "uuid",
   "user_id": "uuid",
-  "audio_url": "https://s3.../audio.wav",
+  "audio_url": "https://cdn.pulse.example.com/audio.wav",
   "transcript": "今天需要完成项目报告...",
   "duration": 120,
   "status": "completed",
@@ -383,15 +383,15 @@ Response 200:
 #### users 表（用户表）
 ```sql
 CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     name VARCHAR(100) NOT NULL,
     avatar_url TEXT,
-    settings JSONB DEFAULT '{}',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMP WITH TIME ZONE
+    settings JSON DEFAULT '{}',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted_at DATETIME
 );
 
 CREATE INDEX idx_users_email ON users(email);
@@ -401,30 +401,33 @@ CREATE INDEX idx_users_deleted_at ON users(deleted_at);
 #### identities 表（身份表）
 ```sql
 CREATE TABLE identities (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    user_id CHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(50) NOT NULL,
     description TEXT,
     color VARCHAR(7) DEFAULT '#000000',
     icon VARCHAR(50) DEFAULT 'person',
     is_default BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMP WITH TIME ZONE
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted_at DATETIME,
+    -- MySQL 不支持部分唯一索引，用生成列实现"每个用户仅一个默认身份"
+    default_user_id CHAR(36) GENERATED ALWAYS AS (
+        CASE WHEN is_default = TRUE AND deleted_at IS NULL THEN user_id ELSE NULL END
+    ) STORED
 );
 
 CREATE INDEX idx_identities_user_id ON identities(user_id);
 CREATE INDEX idx_identities_deleted_at ON identities(deleted_at);
-CREATE UNIQUE INDEX idx_identities_user_default ON identities(user_id, is_default) 
-    WHERE is_default = TRUE AND deleted_at IS NULL;
+CREATE UNIQUE INDEX idx_identities_user_default ON identities(default_user_id);
 ```
 
 #### audio_sessions 表（语音会话表）
 ```sql
 CREATE TABLE audio_sessions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    identity_id UUID REFERENCES identities(id) ON DELETE SET NULL,
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    user_id CHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    identity_id CHAR(36) REFERENCES identities(id) ON DELETE SET NULL,
     device_id VARCHAR(100),
     audio_url TEXT NOT NULL,
     transcript TEXT,
@@ -432,12 +435,12 @@ CREATE TABLE audio_sessions (
     file_size BIGINT, -- 字节
     status VARCHAR(20) NOT NULL DEFAULT 'pending', -- pending, processing, completed, failed
     error_message TEXT,
-    extracted_data JSONB DEFAULT '{}', -- todos, notes, commitments
+    extracted_data JSON DEFAULT '{}', -- todos, notes, commitments
     ai_confidence DECIMAL(3,2), -- AI 识别置信度 0.00-1.00
-    recorded_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    processed_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    recorded_at DATETIME NOT NULL,
+    processed_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_audio_sessions_user_id ON audio_sessions(user_id);
@@ -449,17 +452,17 @@ CREATE INDEX idx_audio_sessions_status ON audio_sessions(status);
 #### devices 表（设备表）
 ```sql
 CREATE TABLE devices (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    user_id CHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     device_id VARCHAR(100) UNIQUE NOT NULL,
     name VARCHAR(100) NOT NULL,
     device_type VARCHAR(50) DEFAULT 'wearable',
     firmware_version VARCHAR(20),
     battery_level INTEGER, -- 0-100
-    last_seen_at TIMESTAMP WITH TIME ZONE,
+    last_seen_at DATETIME,
     is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_devices_user_id ON devices(user_id);
@@ -469,12 +472,12 @@ CREATE INDEX idx_devices_device_id ON devices(device_id);
 #### refresh_tokens 表（刷新令牌表）
 ```sql
 CREATE TABLE refresh_tokens (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    user_id CHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     token_hash VARCHAR(255) NOT NULL,
-    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    revoked_at TIMESTAMP WITH TIME ZONE
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    revoked_at DATETIME
 );
 
 CREATE INDEX idx_refresh_tokens_user_id ON refresh_tokens(user_id);
@@ -495,15 +498,15 @@ import (
 func Up_001(db *sql.DB) error {
     _, err := db.Exec(`
         CREATE TABLE users (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
             email VARCHAR(255) UNIQUE NOT NULL,
             password_hash VARCHAR(255) NOT NULL,
             name VARCHAR(100) NOT NULL,
             avatar_url TEXT,
-            settings JSONB DEFAULT '{}',
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-            deleted_at TIMESTAMP WITH TIME ZONE
+            settings JSON DEFAULT '{}',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            deleted_at DATETIME
         );
 
         CREATE INDEX idx_users_email ON users(email);
@@ -816,7 +819,7 @@ type WorkflowResult struct {
 │  1. 验证用户认证                         │
 │  2. 验证文件格式 (WAV/MP3/M4A)           │
 │  3. 生成唯一 session_id                 │
-│  4. 上传文件到 S3/OSS                    │
+│  4. 上传文件到七牛云                      │
 │  5. 创建 audio_session 记录 (pending)   │
 │  6. 返回 session_id                     │
 └────┬────────────────────────────────────┘
@@ -895,7 +898,7 @@ func (h *AudioHandler) UploadAudio(c *gin.Context) {
     // 4. 生成 session ID
     sessionID := uuid.New()
 
-    // 5. 上传到 S3/OSS
+    // 5. 上传到七牛云
     audioURL, err := h.storageService.Upload(c.Request.Context(), file, sessionID.String())
     if err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "存储失败"})
@@ -1289,23 +1292,28 @@ func UserRateLimitMiddleware(r *redis.Client, maxRequests int, window time.Durat
 package service
 
 import (
+    "bytes"
     "context"
     "crypto/aes"
     "crypto/cipher"
     "crypto/rand"
+    "fmt"
     "io"
+    "net/http"
+    "time"
 
-    "github.com/aws/aws-sdk-go/aws"
-    "github.com/aws/aws-sdk-go/service/s3"
+    "github.com/qiniu/go-sdk/v7/auth/qbox"
+    "github.com/qiniu/go-sdk/v7/storage"
 )
 
 type StorageService struct {
-    s3Client       *s3.S3
-    bucket         string
-    encryptionKey  []byte // 32 bytes for AES-256
+    mac           *qbox.Mac
+    bucket        string
+    domain        string // 七牛云绑定域名
+    encryptionKey []byte // 32 bytes for AES-256
 }
 
-// UploadEncrypted 加密上传文件
+// UploadEncrypted 加密上传文件到七牛云
 func (s *StorageService) UploadEncrypted(ctx context.Context, data []byte, key string) (string, error) {
     // 1. 加密数据
     encryptedData, err := s.encrypt(data)
@@ -1313,41 +1321,47 @@ func (s *StorageService) UploadEncrypted(ctx context.Context, data []byte, key s
         return "", err
     }
 
-    // 2. 上传到 S3
-    _, err = s.s3Client.PutObjectWithContext(ctx, &s3.PutObjectInput{
-        Bucket:               aws.String(s.bucket),
-        Key:                  aws.String(key),
-        Body:                 bytes.NewReader(encryptedData),
-        ServerSideEncryption: aws.String("AES256"), // S3 服务端加密
-        ContentType:          aws.String("audio/encrypted"),
-    })
-
+    // 2. 上传到七牛云
+    putPolicy := storage.PutPolicy{
+        Scope: fmt.Sprintf("%s:%s", s.bucket, key),
+    }
+    upToken := putPolicy.UploadToken(s.mac)
+    formUploader := storage.NewFormUploader(&storage.Config{})
+    ret := storage.PutRet{}
+    err = formUploader.Put(ctx, &ret, upToken, key, bytes.NewReader(encryptedData), int64(len(encryptedData)), &storage.PutExtra{})
     if err != nil {
         return "", err
     }
 
-    url := fmt.Sprintf("https://%s.s3.amazonaws.com/%s", s.bucket, key)
+    // 3. 返回访问地址
+    url := fmt.Sprintf("https://%s/%s", s.domain, key)
     return url, nil
 }
 
 // DownloadDecrypted 下载并解密文件
 func (s *StorageService) DownloadDecrypted(ctx context.Context, key string) ([]byte, error) {
-    // 1. 从 S3 下载
-    result, err := s.s3Client.GetObjectWithContext(ctx, &s3.GetObjectInput{
-        Bucket: aws.String(s.bucket),
-        Key:    aws.String(key),
-    })
+    // 1. 生成七牛云私有空间下载地址
+    bucketManager := storage.NewBucketManager(s.mac, &storage.Config{})
+    deadline := time.Now().Add(1 * time.Hour).Unix()
+    url := bucketManager.PrivateDownloadURL(s.domain, key, deadline)
+
+    // 2. 下载文件
+    req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
     if err != nil {
         return nil, err
     }
-    defer result.Body.Close()
+    resp, err := http.DefaultClient.Do(req)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
 
-    encryptedData, err := io.ReadAll(result.Body)
+    encryptedData, err := io.ReadAll(resp.Body)
     if err != nil {
         return nil, err
     }
 
-    // 2. 解密数据
+    // 3. 解密数据
     return s.decrypt(encryptedData)
 }
 
@@ -1465,25 +1479,28 @@ services:
       - "8080:8080"
     environment:
       - PORT=8080
-      - DATABASE_URL=postgresql://pulse:password@postgres:5432/pulse
+      - DATABASE_DSN=pulse:password@tcp(mysql:3306)/pulse?charset=utf8mb4&parseTime=True&loc=Local
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - QINIU_ACCESS_KEY=${QINIU_ACCESS_KEY}
+      - QINIU_SECRET_KEY=${QINIU_SECRET_KEY}
+      - QINIU_BUCKET=${QINIU_BUCKET}
+      - QINIU_DOMAIN=${QINIU_DOMAIN}
     depends_on:
-      - postgres
+      - mysql
       - redis
 
-  postgres:
-    image: postgres:14-alpine
+  mysql:
+    image: mysql:8.0
     environment:
-      POSTGRES_DB: pulse
-      POSTGRES_USER: pulse
-      POSTGRES_PASSWORD: password
+      MYSQL_DATABASE: pulse
+      MYSQL_USER: pulse
+      MYSQL_PASSWORD: password
+      MYSQL_ROOT_PASSWORD: rootpassword
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
     ports:
-      - "5432:5432"
+      - "3306:3306"
 
   redis:
     image: redis:7-alpine
@@ -1493,7 +1510,7 @@ services:
       - redis_data:/data
 
 volumes:
-  postgres_data:
+  mysql_data:
   redis_data:
 ```
 
@@ -1505,14 +1522,14 @@ PORT=8080
 GIN_MODE=release
 
 # 数据库
-DATABASE_URL=postgresql://user:pass@host:5432/pulse?sslmode=require
+DATABASE_DSN=user:pass@tcp(host:3306)/pulse?charset=utf8mb4&parseTime=True&loc=Local
 REDIS_URL=redis://:password@host:6379/0
 
-# 对象存储
-AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
-AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
-S3_BUCKET=pulse-production
-S3_REGION=us-east-1
+# 对象存储（七牛云）
+QINIU_ACCESS_KEY=your_qiniu_access_key
+QINIU_SECRET_KEY=your_qiniu_secret_key
+QINIU_BUCKET=pulse-production
+QINIU_DOMAIN=cdn.pulse.example.com
 
 # AI 服务
 AI_API_KEY=your_adk_api_key
@@ -1539,11 +1556,11 @@ import (
     "database/sql"
     "time"
 
-    _ "github.com/lib/pq"
+    _ "github.com/go-sql-driver/mysql"
 )
 
-func InitDB(databaseURL string) (*sql.DB, error) {
-    db, err := sql.Open("postgres", databaseURL)
+func InitDB(dsn string) (*sql.DB, error) {
+    db, err := sql.Open("mysql", dsn)
     if err != nil {
         return nil, err
     }

@@ -22,9 +22,9 @@ Pulse 是一个智能身份管理系统，帮助用户在多重生活角色中�
 
 ```
 Pulse/
-├── backend/          # 云端服务（Node.js/Python）
-├── frontend/         # 用户端 App（Flutter）
-├── hardware/         # 硬件设备代码（ESP32/Arduino）
+├── backend/          # 云端服务（Go）
+├── frontend/         # 用户端 Web 应用（React）
+├── hardware/         # 硬件设备（ESP32-S3）
 ├── docs/            # 项目文档
 └── README.md        # 本文件
 ```

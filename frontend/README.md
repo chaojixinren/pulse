@@ -81,7 +81,6 @@ npm run preview
 ### 认证模块
 - 用户注册/登录
 - Token 管理
-- 生物识别（Face ID / 指纹）
 
 ### 设备管理
 - 扫码绑定硬件设备
@@ -114,73 +113,56 @@ npm run preview
 ### 运行测试
 
 ```bash
-flutter test
-```
-
-### 代码生成
-
-```bash
-# 生成模型序列化代码
-flutter pub run build_runner build
-
-# 监听文件变化自动生成
-flutter pub run build_runner watch
+npm test
 ```
 
 ### 代码检查
 
 ```bash
-flutter analyze
+npm run lint
+```
+
+### 类型检查
+
+```bash
+npm run type-check
 ```
 
 ### 格式化代码
 
 ```bash
-flutter format lib/
+npm run format
 ```
 
 ## 构建
 
-### Android
-
 ```bash
-# Debug APK
-flutter build apk --debug
+# 生产构建
+npm run build
 
-# Release APK
-flutter build apk --release
-
-# App Bundle (推荐用于 Google Play)
-flutter build appbundle --release
-```
-
-### iOS
-
-```bash
-# 需要 Mac + Xcode
-flutter build ios --release
+# 预览构建产物
+npm run preview
 ```
 
 ## 目录说明
 
-- `lib/core/` - 核心功能和基础设施代码
-- `lib/features/` - 按功能模块组织的业务代码
-- `lib/widgets/` - 可复用的 UI 组件
-- `assets/` - 图片、图标、字体等资源文件
-- `test/` - 单元测试和集成测试
+- `src/components/` - 可复用的 UI 组件
+- `src/pages/` - 按功能模块组织的页面组件
+- `src/services/` - API 服务层
+- `src/hooks/` - 自定义 Hooks
+- `src/types/` - TypeScript 类型定义
+- `src/utils/` - 工具函数
+- `src/styles/` - 样式文件
 
 ## 主要依赖
 
-```yaml
-dependencies:
-  flutter_riverpod: ^2.4.0      # 状态管理
-  dio: ^5.4.0                    # 网络请求
-  hive: ^2.2.3                   # 本地存储
-  sqflite: ^2.3.0                # SQLite 数据库
-  qr_code_scanner: ^1.0.1        # 扫码绑定设备
-  fl_chart: ^0.65.0              # 图表展示
-  local_auth: ^2.1.8             # 生物识别
-  permission_handler: ^11.1.0    # 权限管理
+```json
+{
+  "react": "^18.3.0",
+  "react-dom": "^18.3.0",
+  "react-router-dom": "^6.21.0",
+  "axios": "^1.6.0"
+}
 ```
 
 ## 许可证

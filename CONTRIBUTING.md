@@ -68,60 +68,50 @@
 
 ### 后端代码规范
 
-```javascript
-// 使用 ES6+ 语法
-const getUserById = async (userId) => {
-  try {
-    const user = await db.users.findById(userId);
-    return user;
-  } catch (error) {
-    logger.error('Failed to get user', { userId, error });
-    throw error;
-  }
-};
+```go
+// 使用有意义的命名和错误处理
+func GetUserByID(ctx context.Context, userID string) (*model.User, error) {
+    user, err := repo.FindUserByID(ctx, userID)
+    if err != nil {
+        logger.Error("获取用户失败", zap.String("user_id", userID), zap.Error(err))
+        return nil, err
+    }
+    return user, nil
+}
 
 // 使用有意义的变量名
-const totalDuration = sessions.reduce((sum, s) => sum + s.duration, 0);
+totalDuration := 0
+for _, s := range sessions {
+    totalDuration += s.Duration
+}
 
 // 添加必要的注释
-/**
- * 分析语音转录文本，提取结构化信息
- * @param {string} transcript - 转录文本
- * @param {string} identityId - 身份 ID
- * @returns {Promise<Object>} 提取的信息
- */
-async function analyzeTranscript(transcript, identityId) {
-  // ...
+// AnalyzeTranscript 分析语音转录文本，提取结构化信息
+func (s *AIService) AnalyzeTranscript(ctx context.Context, transcript, identityID string) (*ExtractedData, error) {
+    // ...
+    return data, nil
 }
 ```
 
-### 前端代码规范（Flutter/Dart）
+### 前端代码规范（React/TypeScript）
 
-```dart
-// 使用有意义的类名和方法名
-class IdentityCard extends StatelessWidget {
-  final Identity identity;
-  final VoidCallback onTap;
-  
-  const IdentityCard({
-    Key? key,
-    required this.identity,
-    required this.onTap,
-  }) : super(key: key);
-  
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      // ...
-    );
-  }
+```tsx
+// 使用函数组件和 TypeScript 类型
+interface IdentityCardProps {
+  identity: Identity;
+  onTap: (id: string) => void;
 }
 
-// 使用 const 构造函数
-const SizedBox(height: 16)
+export const IdentityCard: React.FC<IdentityCardProps> = ({ identity, onTap }) => {
+  return (
+    <div className="identity-card" onClick={() => onTap(identity.id)}>
+      {/* ... */}
+    </div>
+  );
+};
 
 // 格式化
-flutter format lib/
+npm run format
 ```
 
 ### 硬件代码规范（C++）
@@ -154,14 +144,14 @@ bool AudioCapture::init() {
 
 ```bash
 cd backend
-npm test
+go test ./...
 ```
 
 ### 前端测试
 
 ```bash
 cd frontend
-flutter test
+npm test
 ```
 
 ### 硬件测试

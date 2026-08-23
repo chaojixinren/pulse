@@ -64,13 +64,14 @@ PORT=8080
 GIN_MODE=debug
 
 # 数据库
-DATABASE_URL=postgresql://user:password@localhost:5432/pulse
+DATABASE_DSN=user:password@tcp(localhost:3306)/pulse?charset=utf8mb4&parseTime=True&loc=Local
 REDIS_URL=redis://localhost:6379
 
-# 对象存储
-AWS_ACCESS_KEY_ID=your_key
-AWS_SECRET_ACCESS_KEY=your_secret
-S3_BUCKET=pulse-audio
+# 对象存储（七牛云）
+QINIU_ACCESS_KEY=your_qiniu_access_key
+QINIU_SECRET_KEY=your_qiniu_secret_key
+QINIU_BUCKET=pulse-audio
+QINIU_DOMAIN=your-bucket-domain.com
 
 # AI 服务 (adk-go + eino)
 AI_API_KEY=your_ai_api_key
@@ -133,26 +134,21 @@ air
 ### 运行测试
 
 ```bash
-npm test
+go test ./...
 ```
 
 ### 代码检查
 
 ```bash
-npm run lint
+go vet ./...
+golangci-lint run
 ```
 
 ### 数据库迁移
 
 ```bash
-# 创建新迁移
-npm run migrate:create migration_name
-
-# 运行迁移
-npm run migrate
-
-# 回滚迁移
-npm run migrate:rollback
+# 运行数据库迁移
+go run cmd/migrate/main.go
 ```
 
 ## 部署
