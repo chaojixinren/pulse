@@ -24,7 +24,10 @@ Pulse 是一个智能身份空间系统，通过可穿戴硬件设备采集用�
 - **移动端**: 待定（未来可能使用 React Native）
 
 ### 硬件
-- **单片机**: ESP32 / STM32 等（待选型）
+- **单片机**: ESP32-S3 系列芯片（Xtensa® 32 位 LX7 双核微处理器）
+- **无线连接**: 2.4 GHz Wi-Fi (IEEE 802.11b/g/n) 和 Bluetooth® 5 (LE)
+- **存储扩展**: 封装内可叠封 1.8 V / 3.3 V flash 和 PSRAM
+- **GPIO**: 45 个 GPIO 管脚（QFN56，7×7 mm）
 - **RTOS**: FreeRTOS / RT-Thread
 - **界面框架**: LVGL
 - **开发环境**: VSCode + PlatformIO
@@ -71,7 +74,7 @@ Pulse/
 │   ├── package.json           # 依赖
 │   └── README.md
 │
-├── hardware/                   # 硬件设备（技术栈待定）
+├── hardware/                   # 硬件设备（ESP32-S3）
 │   ├── firmware/              # 固件代码
 │   ├── pcb/                   # PCB 设计
 │   ├── enclosure/             # 外壳设计
@@ -126,7 +129,7 @@ npm run dev
 
 ### 硬件
 
-⚠️ 硬件技术栈待确定，暂不开发
+✅ 硬件技术栈已确定（ESP32-S3），参考 `hardware/README.md` 开始原型开发
 
 ## 🔗 Git 仓库
 
@@ -163,8 +166,8 @@ git push -u origin main
 - [ ] 实现报告中心
 - [ ] 实现设备管理（预留）
 
-### Phase 3: 硬件开发（待技术栈确定）
-- [ ] 确定硬件技术栈
+### Phase 3: 硬件开发（ESP32-S3）
+- [x] 确定硬件技术栈（ESP32-S3）
 - [ ] 采购开发板和组件
 - [ ] 实现音频采集
 - [ ] 实现网络通信
@@ -191,11 +194,7 @@ git push -u origin main
    - Chakra UI?
    - Tailwind CSS + Headless UI?
 
-3. **硬件技术栈**
-   - ESP32 系列?
-   - STM32 系列?
-   - Nordic nRF 系列?
-   - 其他方案?
+3. ~~**硬件技术栈**~~ ✅ 已确定：ESP32-S3 系列
 
 4. **部署方案**
    - Docker + Kubernetes?
@@ -224,7 +223,7 @@ git push -u origin main
 ### 后续待办
 1. ⬜ 集成 adk-go + eino AI SDK
 2. ⬜ 实现完整的 API 接口
-3. ⬜ 决定硬件技术栈
+3. ✅ 决定硬件技术栈（ESP32-S3）
 4. ⬜ 制定详细的开发计划
 
 ## 📖 重要文档
@@ -238,7 +237,7 @@ git push -u origin main
 ## ⚠️ 重要提醒
 
 1. **技术栈由项目负责人决定** - 不要自行更改已确定的技术选型
-2. **硬件部分待定** - 硬件技术栈需要单独评估后再决定
+2. **硬件技术栈已确定** - 采用 ESP32-S3 系列芯片
 3. **文档需要更新** - 部分文档仍基于旧技术栈（Node.js/Flutter），需要逐步更新
 
 ---

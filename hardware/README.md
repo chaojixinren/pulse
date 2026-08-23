@@ -4,11 +4,19 @@
 
 ## 技术栈
 
-- **单片机**: 待定（ESP32 系列 / STM32 系列等）
+- **单片机**: ESP32-S3 系列芯片（Xtensa® 32 位 LX7 双核微处理器）
 - **RTOS**: FreeRTOS / RT-Thread
 - **界面框架**: LVGL
 - **开发环境**: VSCode + PlatformIO
 - **编程语言**: C / Arduino
+
+### 芯片规格（ESP32-S3）
+
+- **处理器**: Xtensa® 32 位 LX7 双核微处理器
+- **无线连接**: 2.4 GHz Wi-Fi (IEEE 802.11b/g/n) 和 Bluetooth® 5 (LE)
+- **存储扩展**: 芯片封装内可叠封 1.8 V 或 3.3 V flash 和 PSRAM
+- **GPIO**: 45 个 GPIO 管脚
+- **封装**: QFN56 (7×7 mm) 封装
 
 ## 规划中的功能
 
@@ -87,7 +95,7 @@ pio device monitor
 
 ---
 
-**当前状态**：技术栈已确定，等待单片机型号选择后开始开发
+**当前状态**：技术栈已确定（ESP32-S3），可开始固件开发与原型验证
 
 ## 项目结构
 

@@ -35,7 +35,7 @@ Pulse/
 
 - **后端**：Go 1.21+
 - **前端**：Node.js 18+
-- **硬件**：待定
+- **硬件**：ESP32-S3
 
 ### 安装步骤
 
@@ -60,7 +60,7 @@ npm run dev
 
 #### 3. 硬件设备
 
-硬件技术栈待定，暂不开发。
+硬件采用 ESP32-S3，开发指南见 `hardware/README.md`。
 
 详细文档请查看各模块的 README。
 
@@ -87,7 +87,8 @@ npm run dev
 - **移动端**：待定（未来可能使用 React Native）
 
 ### 硬件
-- **单片机**：ESP32 / STM32 等
+- **单片机**：ESP32-S3（Xtensa® 32 位 LX7 双核）
+- **无线连接**：2.4 GHz Wi-Fi (IEEE 802.11b/g/n) + Bluetooth® 5 (LE)
 - **RTOS**：FreeRTOS / RT-Thread
 - **界面**：LVGL
 - **开发环境**：VSCode + PlatformIO
