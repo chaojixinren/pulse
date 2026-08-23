@@ -7,9 +7,10 @@
 - **语言**：Go 1.21+
 - **框架**：Gin
 - **AI SDK**：adk-go + eino
-- **数据库**：PostgreSQL 14+
+- **STT 服务**：StepFun StepAudio-2.5-ASR
+- **数据库**：MySQL 8.0+
 - **缓存**：Redis 7+
-- **对象存储**：AWS S3 / 阿里云 OSS
+- **对象存储**：七牛云
 
 ## 项目结构
 

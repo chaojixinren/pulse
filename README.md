@@ -78,8 +78,9 @@ npm run dev
 - **语言**：Go
 - **框架**：Gin
 - **AI SDK**：adk-go + eino
-- **数据库**：PostgreSQL + Redis
-- **对象存储**：AWS S3 / 阿里云 OSS
+- **STT 服务**：StepFun StepAudio-2.5-ASR
+- **数据库**：MySQL + Redis
+- **对象存储**：七牛云
 
 ### 前端
 - **框架**：React
