@@ -84,10 +84,10 @@ func (s *AIService) AnalyzeTranscript(ctx context.Context, transcript string, id
 分析结果写入 `extracted_data`（JSON 列）与 `identity_id`、`ai_confidence` 字段。
 
 ### 验收标准
-- [ ] 给定一段「工作会议」转写，能识别到对应身份且置信度合理。
-- [ ] 能从转写中抽出明确的待办和承诺，字段格式正确。
-- [ ] LLM 返回非法 JSON 时不崩溃，会话不丢失（降级处理）。
-- [ ] 低置信度结果不强制绑定身份。
+- [x] 给定一段「工作会议」转写，能识别到对应身份且置信度合理。
+- [x] 能从转写中抽出明确的待办和承诺，字段格式正确。
+- [x] LLM 返回非法 JSON 时不崩溃，会话不丢失（降级处理）。
+- [x] 低置信度结果不强制绑定身份。
 
 ---
 
@@ -136,9 +136,9 @@ internal/model/device.go
 - 设备绑定流程：前端生成绑定码 → 硬件首次连接时携带绑定码换取设备 token。
 
 ### 验收标准
-- [ ] 设备可绑定/解绑，绑定码一次性有效。
-- [ ] 心跳更新 last_seen_at 与电量。
-- [ ] 指令可下发（Phase 2 先落库，硬件按需拉取）。
+- [x] 设备可绑定/解绑，绑定码一次性有效。
+- [x] 心跳更新 last_seen_at 与电量。
+- [x] 指令可下发（Phase 2 先落库，硬件按需拉取）。
 
 ---
 
@@ -183,9 +183,9 @@ internal/model/reminder.go
 - 身份切换（新的身份识别结果与上一条不同）时生成 `identity_switch` 提醒，内容引用该身份下未完成的待办。
 
 ### 验收标准
-- [ ] 提取到待办后自动生成 reminder。
-- [ ] 提醒可标记完成/忽略。
-- [ ] 身份切换提醒引用正确身份下的未完成事项。
+- [x] 提取到待办后自动生成 reminder。
+- [x] 提醒可标记完成/忽略。
+- [x] 身份切换提醒引用正确身份下的未完成事项。
 
 ---
 
@@ -207,3 +207,25 @@ internal/model/reminder.go
 - 数据模型见 `backend/migrations/002_phase2.sql`（devices / device_bind_codes / device_commands / reminders）。
 
 > 注：文档早期标注的 adk-go + eino 框架未引入；实际采用轻量 OpenAI 兼容 chat/completions 客户端（`net/http`）做显式两阶段编排，兼顾低依赖与可测试性。后续如需 eino Graph 编排可平滑替换 `AIService` 内部实现而不改对外签名。
+
+---
+
+## 验收测试覆盖
+
+逐项验收对应的测试（`go test -race ./...` 全部通过）：
+
+| 验收项 | 单元测试 | 集成 / e2e |
+|------|---------|-----------|
+| AI 识别身份且置信度合理 | `internal/service/ai_test.go`、`ai_extended_test.go` | `internal/worker/audio_processor_analyze_test.go` |
+| 提取待办/承诺/笔记，字段格式正确（含 due_at） | `ai_extended_test.go` | 同上 |
+| LLM 非法 JSON / 失败不崩溃、降级不丢会话 | `ai_extended_test.go` | `TestAudioProcessorAnalyzeDegradesOnAIError` |
+| 低置信度不误绑身份 | `ai_test.go`、`ai_extended_test.go` | — |
+| 设备绑定/解绑、绑定码一次性 | `device_test.go`、`device_extended_test.go` | `internal/api/e2e_test.go`、`e2e_phase2_test.go` |
+| 心跳更新电量/版本 | `device_test.go`、`device_extended_test.go` | `e2e_test.go` |
+| 指令下发（落库） | `device_test.go`、`device_extended_test.go` | `e2e_phase2_test.go` |
+| 待办/承诺自动生成提醒 | `reminder_test.go`、`reminder_extended_test.go` | `audio_processor_analyze_test.go` |
+| 提醒完成/忽略 | `reminder_test.go`、`reminder_extended_test.go` | `e2e_test.go`、`e2e_phase2_test.go` |
+| 身份切换提醒引用正确身份 | `reminder_test.go`、`reminder_extended_test.go` | `audio_processor_analyze_test.go` |
+
+真实基础设施 e2e（需 MySQL/Redis，先执行 migrations）见 `test/e2e_live_test.go` 与 `test/e2e_live_phase2_test.go`（`go test -tags e2e`）。
+
