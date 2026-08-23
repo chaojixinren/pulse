@@ -2,9 +2,7 @@ package service
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
-	"strings"
+	"errors"
 	"testing"
 	"time"
 
@@ -16,16 +14,6 @@ import (
 
 func aiTestStrPtr(s string) *string        { return &s }
 func aiTestTimePtr(t time.Time) *time.Time { return &t }
-
-// writeChatOK 写出一个 OpenAI 兼容的 chat/completions 成功响应。
-func writeChatOK(w http.ResponseWriter, content string) {
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"choices": []map[string]interface{}{
-			{"message": map[string]string{"role": "assistant", "content": content}},
-		},
-	})
-}
 
 func TestParseDueAt(t *testing.T) {
 	tests := []struct {
@@ -57,12 +45,12 @@ func TestParseDueAt(t *testing.T) {
 
 // TestAnalyzeTranscriptWorkMeetingExtraction 验收：给定「工作会议」转写，识别身份并抽出格式正确的待办/承诺/笔记（含 due_at）。
 func TestAnalyzeTranscriptWorkMeetingExtraction(t *testing.T) {
-	svc := newTestAIService(t, chatHandler(
-		func() string { return `{"identity_id":"i1","confidence":0.85}` },
-		func() string {
-			return `{"todos":[{"text":"周五前交周报","due_at":"2024-06-07T18:00:00Z"}],"commitments":[{"text":"帮市场部改方案","from":"我","to":"小王","due_at":"2024-06-05"}],"notes":["下次站会改到周一"]}`
+	svc := newFakeAIService(
+		func() (string, error) { return "{\"identity_id\":\"i1\",\"confidence\":0.85}", nil },
+		func() (string, error) {
+			return "{\"todos\":[{\"text\":\"周五前交周报\",\"due_at\":\"2024-06-07T18:00:00Z\"}],\"commitments\":[{\"text\":\"帮市场部改方案\",\"from\":\"我\",\"to\":\"小王\",\"due_at\":\"2024-06-05\"}],\"notes\":[\"下次站会改到周一\"]}", nil
 		},
-	), 0.6)
+	)
 
 	res, err := svc.AnalyzeTranscript(context.Background(),
 		"我们讨论一下 Q2 目标，我周五前交周报，另外我承诺帮小王在市场部方案上出一版。",
@@ -87,16 +75,16 @@ func TestAnalyzeTranscriptWorkMeetingExtraction(t *testing.T) {
 // TestAnalyzeTranscriptExtractionInvalidJSONThenRetry 验收：提取阶段返回非法 JSON 时重试一次。
 func TestAnalyzeTranscriptExtractionInvalidJSONThenRetry(t *testing.T) {
 	extractCalls := 0
-	svc := newTestAIService(t, chatHandler(
-		func() string { return `{"identity_id":"i1","confidence":0.9}` },
-		func() string {
+	svc := newFakeAIService(
+		func() (string, error) { return "{\"identity_id\":\"i1\",\"confidence\":0.9}", nil },
+		func() (string, error) {
 			extractCalls++
 			if extractCalls == 1 {
-				return "这不是合法 JSON"
+				return "这不是合法 JSON", nil
 			}
-			return `{"todos":[{"text":"买菜","due_at":"2024-06-01T10:00:00Z"}],"commitments":[],"notes":[]}`
+			return "{\"todos\":[{\"text\":\"买菜\",\"due_at\":\"2024-06-01T10:00:00Z\"}],\"commitments\":[],\"notes\":[]}", nil
 		},
-	), 0.6)
+	)
 
 	res, err := svc.AnalyzeTranscript(context.Background(), "开会说明天买菜", []model.Identity{{ID: "i1", Name: "工作"}})
 	require.NoError(t, err)
@@ -106,27 +94,12 @@ func TestAnalyzeTranscriptExtractionInvalidJSONThenRetry(t *testing.T) {
 	assert.Equal(t, 2, extractCalls, "提取阶段解析失败应重试一次")
 }
 
-// TestAnalyzeTranscriptExtractionDegradesOnHTTPError 验收：提取阶段网络失败时不崩溃、降级为空提取，身份识别不受影响。
-func TestAnalyzeTranscriptExtractionDegradesOnHTTPError(t *testing.T) {
-	svc := newTestAIService(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req struct {
-			Messages []struct {
-				Role    string `json:"role"`
-				Content string `json:"content"`
-			} `json:"messages"`
-		}
-		_ = json.NewDecoder(r.Body).Decode(&req)
-		system := ""
-		if len(req.Messages) > 0 {
-			system = req.Messages[0].Content
-		}
-		if strings.Contains(system, "身份识别") {
-			writeChatOK(w, `{"identity_id":"i1","confidence":0.9}`)
-			return
-		}
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(`{"error":"model down"}`))
-	}), 0.6)
+// TestAnalyzeTranscriptExtractionDegradesOnError 验收：提取阶段模型失败时不崩溃、降级为空提取，身份识别不受影响。
+func TestAnalyzeTranscriptExtractionDegradesOnError(t *testing.T) {
+	svc := newFakeAIService(
+		func() (string, error) { return "{\"identity_id\":\"i1\",\"confidence\":0.9}", nil },
+		func() (string, error) { return "", errors.New("model down") },
+	)
 
 	res, err := svc.AnalyzeTranscript(context.Background(), "开会", []model.Identity{{ID: "i1", Name: "工作"}})
 	require.NoError(t, err, "提取失败不应导致整体崩溃")
@@ -136,26 +109,14 @@ func TestAnalyzeTranscriptExtractionDegradesOnHTTPError(t *testing.T) {
 	assert.Empty(t, res.Extracted.Notes)
 }
 
-// TestAnalyzeTranscriptIdentityDegradesOnHTTPError 验收：身份识别失败时降级为未绑定（confidence=0），提取阶段不受影响。
-func TestAnalyzeTranscriptIdentityDegradesOnHTTPError(t *testing.T) {
-	svc := newTestAIService(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req struct {
-			Messages []struct {
-				Role    string `json:"role"`
-				Content string `json:"content"`
-			} `json:"messages"`
-		}
-		_ = json.NewDecoder(r.Body).Decode(&req)
-		system := ""
-		if len(req.Messages) > 0 {
-			system = req.Messages[0].Content
-		}
-		if strings.Contains(system, "身份识别") {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		writeChatOK(w, `{"todos":[],"commitments":[],"notes":["会议定在周三"]}`)
-	}), 0.6)
+// TestAnalyzeTranscriptIdentityDegradesOnError 验收：身份识别失败时降级为未绑定（confidence=0），提取阶段不受影响。
+func TestAnalyzeTranscriptIdentityDegradesOnError(t *testing.T) {
+	svc := newFakeAIService(
+		func() (string, error) { return "", errors.New("model down") },
+		func() (string, error) {
+			return "{\"todos\":[],\"commitments\":[],\"notes\":[\"会议定在周三\"]}", nil
+		},
+	)
 
 	res, err := svc.AnalyzeTranscript(context.Background(), "开会", []model.Identity{{ID: "i1", Name: "工作"}})
 	require.NoError(t, err)
@@ -168,10 +129,10 @@ func TestAnalyzeTranscriptIdentityDegradesOnHTTPError(t *testing.T) {
 // TestRecognizeIdentityConfidenceClamped 验收：LLM 返回越界置信度时被截断到 [0,1]。
 func TestRecognizeIdentityConfidenceClamped(t *testing.T) {
 	t.Run("超过 1 截断为 1", func(t *testing.T) {
-		svc := newTestAIService(t, chatHandler(
-			func() string { return `{"identity_id":"i1","confidence":1.5}` },
-			func() string { return `{"todos":[],"commitments":[],"notes":[]}` },
-		), 0.6)
+		svc := newFakeAIService(
+			func() (string, error) { return "{\"identity_id\":\"i1\",\"confidence\":1.5}", nil },
+			func() (string, error) { return "{\"todos\":[],\"commitments\":[],\"notes\":[]}", nil },
+		)
 		res, err := svc.AnalyzeTranscript(context.Background(), "开会", []model.Identity{{ID: "i1", Name: "工作"}})
 		require.NoError(t, err)
 		assert.Equal(t, 1.0, res.Confidence)
@@ -179,10 +140,10 @@ func TestRecognizeIdentityConfidenceClamped(t *testing.T) {
 	})
 
 	t.Run("小于 0 截断为 0", func(t *testing.T) {
-		svc := newTestAIService(t, chatHandler(
-			func() string { return `{"identity_id":"i1","confidence":-0.5}` },
-			func() string { return `{"todos":[],"commitments":[],"notes":[]}` },
-		), 0.6)
+		svc := newFakeAIService(
+			func() (string, error) { return "{\"identity_id\":\"i1\",\"confidence\":-0.5}", nil },
+			func() (string, error) { return "{\"todos\":[],\"commitments\":[],\"notes\":[]}", nil },
+		)
 		res, err := svc.AnalyzeTranscript(context.Background(), "开会", []model.Identity{{ID: "i1", Name: "工作"}})
 		require.NoError(t, err)
 		assert.Equal(t, 0.0, res.Confidence)

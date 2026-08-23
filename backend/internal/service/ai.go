@@ -1,12 +1,9 @@
 package service
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"time"
 
@@ -14,23 +11,23 @@ import (
 	"github.com/chaojixinren/pulse/internal/model"
 	apperrors "github.com/chaojixinren/pulse/pkg/errors"
 	"github.com/chaojixinren/pulse/pkg/prompt"
+
+	adkmodel "google.golang.org/adk/v2/model"
+	"google.golang.org/adk/v2/model/openaimodel"
+	"google.golang.org/genai"
 )
 
 const (
-	defaultAIBaseURL             = "https://api.openai.com/v1/chat/completions"
+	defaultAIBaseURL             = "https://api.openai.com/v1"
 	defaultAIModel               = "gpt-4o-mini"
 	defaultAIConfidenceThreshold = 0.6
-	aiHTTPTimeout                = 60 * time.Second
 )
 
 // AIService 负责把转写文本交给 LLM，完成身份识别与信息提取。
-// 使用 OpenAI 兼容的 chat/completions 客户端做显式两阶段编排：先身份识别，再信息提取。
+// 使用 adk-go 的 openaimodel 接入 OpenAI 兼容模型，做显式两阶段编排：先身份识别，再信息提取。
 type AIService struct {
-	httpClient *http.Client
-	baseURL    string
-	apiKey     string
-	modelName  string
-	threshold  float64
+	model     adkmodel.LLM
+	threshold float64
 }
 
 // NewAIService 根据配置构建 AI 分析服务。
@@ -43,24 +40,34 @@ func NewAIService(cfg *config.Config) *AIService {
 	if modelName == "" {
 		modelName = defaultAIModel
 	}
+	llm, err := openaimodel.NewModel(context.Background(), modelName, &openaimodel.ClientConfig{
+		APIKey:  cfg.AIAPIKey,
+		BaseURL: baseURL,
+	})
+	if err != nil {
+		// modelName 已在上方保证非空，此分支理论上不可达；兜底以防 SDK 行为变化。
+		panic(fmt.Sprintf("创建 OpenAI 模型失败: %v", err))
+	}
 	threshold := cfg.AIConfidenceThreshold
 	if threshold <= 0 {
 		threshold = defaultAIConfidenceThreshold
 	}
-	return newAIService(baseURL, cfg.AIAPIKey, modelName, &http.Client{Timeout: aiHTTPTimeout}, threshold)
+	return newAIService(llm, threshold)
 }
 
-// newAIService 构建 AI 服务，允许注入自定义 HTTP 客户端（测试用）。
-func newAIService(baseURL, apiKey, modelName string, httpClient *http.Client, threshold float64) *AIService {
+// NewAIServiceWithModel 注入自定义 model.LLM（测试/依赖注入用）。
+func NewAIServiceWithModel(llm adkmodel.LLM, threshold float64) *AIService {
+	return newAIService(llm, threshold)
+}
+
+// newAIService 构建 AI 服务，允许注入自定义 model.LLM（测试用）。
+func newAIService(llm adkmodel.LLM, threshold float64) *AIService {
 	if threshold <= 0 {
 		threshold = defaultAIConfidenceThreshold
 	}
 	return &AIService{
-		httpClient: httpClient,
-		baseURL:    baseURL,
-		apiKey:     apiKey,
-		modelName:  modelName,
-		threshold:  threshold,
+		model:     llm,
+		threshold: threshold,
 	}
 }
 
@@ -95,73 +102,35 @@ func buildAnalysisResult(identityID string, confidence float64, threshold float6
 	return result
 }
 
-type chatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-type chatCompletionRequest struct {
-	Model    string        `json:"model"`
-	Messages []chatMessage `json:"messages"`
-}
-
-type chatCompletionResponse struct {
-	Choices []struct {
-		Message chatMessage `json:"message"`
-	} `json:"choices"`
-	Error *struct {
-		Message string `json:"message"`
-	} `json:"error"`
-}
-
-// call 执行一次 chat/completions 调用，返回模型输出的文本。
+// call 通过 adk-go 的 model.LLM 执行一次生成，返回模型输出的文本。
 func (s *AIService) call(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
-	reqBody := chatCompletionRequest{
-		Model: s.modelName,
-		Messages: []chatMessage{
-			{Role: "system", Content: systemPrompt},
-			{Role: "user", Content: userPrompt},
+	req := &adkmodel.LLMRequest{
+		Contents: []*genai.Content{
+			{Role: "user", Parts: []*genai.Part{{Text: userPrompt}}},
+		},
+		Config: &genai.GenerateContentConfig{
+			SystemInstruction: &genai.Content{Parts: []*genai.Part{{Text: systemPrompt}}},
 		},
 	}
-	payload, err := json.Marshal(reqBody)
-	if err != nil {
-		return "", err
-	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, s.baseURL, bytes.NewReader(payload))
-	if err != nil {
-		return "", err
+	var out strings.Builder
+	for resp, err := range s.model.GenerateContent(ctx, req, false) {
+		if err != nil {
+			return "", err
+		}
+		if resp == nil || resp.Content == nil {
+			continue
+		}
+		for _, part := range resp.Content.Parts {
+			if part != nil && part.Text != "" {
+				out.WriteString(part.Text)
+			}
+		}
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	if s.apiKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+s.apiKey)
+	if strings.TrimSpace(out.String()) == "" {
+		return "", fmt.Errorf("模型无返回内容")
 	}
-
-	resp, err := s.httpClient.Do(httpReq)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("chat completion 请求失败: status=%d body=%s", resp.StatusCode, string(body))
-	}
-
-	var cr chatCompletionResponse
-	if err := json.Unmarshal(body, &cr); err != nil {
-		return "", err
-	}
-	if cr.Error != nil && cr.Error.Message != "" {
-		return "", fmt.Errorf("chat completion 返回错误: %s", cr.Error.Message)
-	}
-	if len(cr.Choices) == 0 {
-		return "", fmt.Errorf("chat completion 无返回内容")
-	}
-	return cr.Choices[0].Message.Content, nil
+	return out.String(), nil
 }
 
 type identityWire struct {

@@ -76,7 +76,7 @@ npm run dev
 ### 后端
 - **语言**：Go
 - **框架**：Gin
-- **AI SDK**：OpenAI 兼容 chat/completions（net/http）
+- **AI SDK**：adk-go（Google Agent Development Kit）
 - **STT 服务**：StepFun StepAudio-2.5-ASR
 - **数据库**：MySQL + Redis
 - **对象存储**：七牛云

@@ -47,7 +47,7 @@ backend/
 │   │   ├── auth.go
 │   │   ├── audio.go
 │   │   ├── stt.go               # StepFun STT 封装
-│   │   ├── ai.go                # Phase 2：AI 分析（chat/completions 编排）
+│   │   ├── ai.go                # Phase 2：AI 分析（adk-go openaimodel 编排）
 │   │   ├── identity.go
 │   │   ├── timeline.go
 │   │   ├── report.go
@@ -103,7 +103,7 @@ backend/
 HTTP 请求 → api(handler) → service(业务逻辑) → repository(数据访问) → MySQL
                                    │
                                    ├→ stt(StepFun)
-                                   └→ ai(chat/completions)
+                                   └→ ai(adk-go)
 
 后台任务 → worker → service → ...
 ```

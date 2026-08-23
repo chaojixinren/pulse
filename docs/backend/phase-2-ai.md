@@ -1,6 +1,6 @@
 # Phase 2：AI 增强开发文档
 
-> **目标**：在 Phase 1 转写闭环基础上，用 LLM（OpenAI 兼容 chat/completions）从转写文本中自动识别身份、提取待办/承诺/笔记。
+> **目标**：在 Phase 1 转写闭环基础上，用 LLM（adk-go openaimodel，OpenAI 兼容）从转写文本中自动识别身份、提取待办/承诺/笔记。
 > **完成标志**：系统能自动识别身份、提取结构化信息。
 
 ## 模块依赖关系
@@ -24,7 +24,7 @@
 
 ### 目录 / 文件
 ```
-internal/service/ai.go        # AI 分析服务（chat/completions 两阶段编排）
+internal/service/ai.go        # AI 分析服务（adk-go openaimodel 两阶段编排）
 internal/model/extraction.go  # 提取结果 struct
 pkg/prompt/                   # prompt 模板集中管理（可选）
 ```
@@ -74,7 +74,7 @@ func (s *AIService) AnalyzeTranscript(ctx context.Context, transcript string, id
 ```
 
 ### 编排要点
-- 用轻量 OpenAI 兼容 chat/completions 客户端（`net/http`）直接调用模型两次——先身份识别、再信息提取，各自独立解析 JSON。
+- 用 adk-go 的 openaimodel（OpenAI 兼容接口）直接调用模型两次——先身份识别、再信息提取，各自独立解析 JSON。
 - 身份识别把用户已有身份列表作为候选标签传入，避免 LLM 自由发挥。
 - 提示词要求 JSON 输出，解析失败时重试一次，再失败则该会话标记 `confidence=0` 降级为未分类。
 - **置信度低于阈值（如 0.6）时**：不自动绑定身份，`identity_id` 留空，交给用户手动标注。
@@ -152,11 +152,11 @@ internal/model/device.go
 
 两个模块已落地并配齐单元测试 + e2e 测试（`go test -race ./...` 全部通过）：
 
-- **AI 分析**：`internal/service/ai.go` 基于轻量 OpenAI 兼容 chat/completions 客户端（`net/http`，配置项 `AI_API_KEY` / `AI_BASE_URL` / `AI_MODEL`）做显式两阶段编排——先身份识别（worker 拉取用户身份列表作为候选标签、返回 identity_id + confidence），再信息提取（todos/commitments/notes）。JSON 解析失败重试一次，再失败降级为 `confidence=0`、不绑定身份；置信度低于 `AI_CONFIDENCE_THRESHOLD`（默认 0.6）同样不绑定。提示词集中在 `pkg/prompt`。
+- **AI 分析**：`internal/service/ai.go` 基于 adk-go 的 openaimodel（OpenAI 兼容接口，配置项 `AI_API_KEY` / `AI_BASE_URL` / `AI_MODEL`）做显式两阶段编排——先身份识别（worker 拉取用户身份列表作为候选标签、返回 identity_id + confidence），再信息提取（todos/commitments/notes）。JSON 解析失败重试一次，再失败降级为 `confidence=0`、不绑定身份；置信度低于 `AI_CONFIDENCE_THRESHOLD`（默认 0.6）同样不绑定。提示词集中在 `pkg/prompt`。
 - **设备管理**：`internal/service/device.go` + `internal/repository/device.go` 实现绑定码（一次性、10 分钟有效）、绑定/解绑、心跳、指令落库；绑定返回一次性设备 token（仅存哈希）。
 - 数据模型见 `backend/migrations/002_phase2.sql`（devices / device_bind_codes / device_commands）。
 
-> 注：文档早期标注的 adk-go + eino 框架未引入；实际采用轻量 OpenAI 兼容 chat/completions 客户端（`net/http`）做显式两阶段编排，兼顾低依赖与可测试性。后续如需 eino Graph 编排可平滑替换 `AIService` 内部实现而不改对外签名。
+> 注：AI 分析现已接入 adk-go，采用其 openaimodel（OpenAI 兼容接口）做显式两阶段编排——先身份识别、再信息提取；`AIService` 对外签名不变，后续如需升级为 sequentialagent/eino Graph 编排可平滑替换内部实现。
 
 ---
 

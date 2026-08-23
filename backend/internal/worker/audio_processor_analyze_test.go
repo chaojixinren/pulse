@@ -3,8 +3,8 @@ package worker
 import (
 	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
+	"errors"
+	"iter"
 	"regexp"
 	"strings"
 	"testing"
@@ -14,45 +14,59 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/chaojixinren/pulse/internal/config"
 	"github.com/chaojixinren/pulse/internal/model"
 	"github.com/chaojixinren/pulse/internal/repository"
 	"github.com/chaojixinren/pulse/internal/service"
+
+	adkmodel "google.golang.org/adk/v2/model"
+	"google.golang.org/genai"
 )
 
 var workerIdentityCols = []string{"id", "user_id", "name", "description", "color", "icon", "is_default", "created_at", "updated_at", "deleted_at"}
 
+// fakeWorkerLLM 是 worker 测试用的可脚本化 model.LLM：依据系统提示词区分身份识别/信息提取两阶段。
+type fakeWorkerLLM struct {
+	identity string
+	extract  string
+	fail     bool
+}
+
+func (f *fakeWorkerLLM) Name() string { return "test-model" }
+
+func (f *fakeWorkerLLM) GenerateContent(_ context.Context, req *adkmodel.LLMRequest, _ bool) iter.Seq2[*adkmodel.LLMResponse, error] {
+	return func(yield func(*adkmodel.LLMResponse, error) bool) {
+		if f.fail {
+			yield(nil, errors.New("model down"))
+			return
+		}
+		text := f.extract
+		if strings.Contains(workerSystemText(req), "身份识别") {
+			text = f.identity
+		}
+		yield(&adkmodel.LLMResponse{
+			Content: &genai.Content{Role: "model", Parts: []*genai.Part{{Text: text}}},
+		}, nil)
+	}
+}
+
+func workerSystemText(req *adkmodel.LLMRequest) string {
+	if req == nil || req.Config == nil || req.Config.SystemInstruction == nil {
+		return ""
+	}
+	var b strings.Builder
+	for _, p := range req.Config.SystemInstruction.Parts {
+		if p != nil {
+			b.WriteString(p.Text)
+		}
+	}
+	return b.String()
+}
+
 // newFakeAI 构建一个可脚本化的 AI 服务：依据系统提示词区分身份识别/信息提取两阶段。
-func newFakeAI(t *testing.T, identityResp, extractResp map[string]interface{}) *service.AIService {
-	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]interface{}
-		_ = json.NewDecoder(r.Body).Decode(&body)
-		system := ""
-		if msgs, ok := body["messages"].([]interface{}); ok && len(msgs) > 0 {
-			if m, ok := msgs[0].(map[string]interface{}); ok {
-				system, _ = m["content"].(string)
-			}
-		}
-		resp := extractResp
-		if strings.Contains(system, "身份识别") {
-			resp = identityResp
-		}
-		content, _ := json.Marshal(resp)
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"choices": []interface{}{
-				map[string]interface{}{"message": map[string]interface{}{"role": "assistant", "content": string(content)}},
-			},
-		})
-	}))
-	t.Cleanup(srv.Close)
-	return service.NewAIService(&config.Config{
-		AIBaseURL:             srv.URL,
-		AIAPIKey:              "test-key",
-		AIModel:               "test-model",
-		AIConfidenceThreshold: 0.6,
-	})
+func newFakeAI(identityResp, extractResp map[string]interface{}) *service.AIService {
+	idJSON, _ := json.Marshal(identityResp)
+	exJSON, _ := json.Marshal(extractResp)
+	return service.NewAIServiceWithModel(&fakeWorkerLLM{identity: string(idJSON), extract: string(exJSON)}, 0.6)
 }
 
 // TestAudioProcessorAnalyzeFullFlow 集成验收：转写完成 → 拉取候选身份 → AI 两阶段分析 → 回写会话。
@@ -63,7 +77,7 @@ func TestAudioProcessorAnalyzeFullFlow(t *testing.T) {
 
 	sessions := repository.NewAudioSessionRepo(db)
 	identities := repository.NewIdentityRepo(db)
-	ai := newFakeAI(t,
+	ai := newFakeAI(
 		map[string]interface{}{"identity_id": "i2", "confidence": 0.9},
 		map[string]interface{}{
 			"todos":       []interface{}{map[string]interface{}{"text": "买菜"}},
@@ -107,7 +121,7 @@ func TestAudioProcessorAnalyzeEmptyExtraction(t *testing.T) {
 
 	sessions := repository.NewAudioSessionRepo(db)
 	identities := repository.NewIdentityRepo(db)
-	ai := newFakeAI(t,
+	ai := newFakeAI(
 		map[string]interface{}{"identity_id": "i1", "confidence": 0.9},
 		map[string]interface{}{"todos": []interface{}{}, "commitments": []interface{}{}, "notes": []interface{}{}},
 	)
@@ -139,12 +153,7 @@ func TestAudioProcessorAnalyzeDegradesOnAIError(t *testing.T) {
 
 	sessions := repository.NewAudioSessionRepo(db)
 	identities := repository.NewIdentityRepo(db)
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	t.Cleanup(srv.Close)
-	ai := service.NewAIService(&config.Config{AIBaseURL: srv.URL, AIAPIKey: "k", AIModel: "m", AIConfidenceThreshold: 0.6})
+	ai := service.NewAIServiceWithModel(&fakeWorkerLLM{fail: true}, 0.6)
 
 	w := &AudioProcessor{sessions: sessions, identities: identities, ai: ai}
 

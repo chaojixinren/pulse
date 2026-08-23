@@ -61,7 +61,7 @@ GIN_MODE=debug
 DATABASE_DSN=user:password@tcp(localhost:3306)/pulse?charset=utf8mb4&parseTime=True&loc=Local
 REDIS_URL=redis://localhost:6379
 
-# AI 服务 (chat/completions)
+# AI 服务 (adk-go)
 AI_API_KEY=your_ai_api_key
 AI_BASE_URL=https://api.openai.com/v1
 AI_MODEL=gpt-4o-mini

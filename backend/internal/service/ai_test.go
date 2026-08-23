@@ -3,9 +3,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,44 +10,6 @@ import (
 
 	"github.com/chaojixinren/pulse/internal/model"
 )
-
-// newTestAIService 启动一个可脚本化的 httptest 服务器并构建 AI 服务。
-func newTestAIService(t *testing.T, handler http.HandlerFunc, threshold float64) *AIService {
-	t.Helper()
-	srv := httptest.NewServer(handler)
-	t.Cleanup(srv.Close)
-	return newAIService(srv.URL, "test-key", "test-model", srv.Client(), threshold)
-}
-
-// chatHandler 依据请求里的系统提示词分发到身份识别 / 信息提取响应。
-func chatHandler(identityFn, extractFn func() string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var req struct {
-			Messages []struct {
-				Role    string `json:"role"`
-				Content string `json:"content"`
-			} `json:"messages"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		system := ""
-		if len(req.Messages) > 0 {
-			system = req.Messages[0].Content
-		}
-		content := extractFn()
-		if strings.Contains(system, "身份识别") {
-			content = identityFn()
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"choices": []map[string]interface{}{
-				{"message": map[string]string{"role": "assistant", "content": content}},
-			},
-		})
-	}
-}
 
 func TestStripCodeFences(t *testing.T) {
 	tests := []struct {
@@ -60,19 +19,18 @@ func TestStripCodeFences(t *testing.T) {
 	}{
 		{
 			name:  "纯 JSON",
-			input: `{"key": "value"}`,
-
-			want: `{"key": "value"}`,
+			input: "{\"key\": \"value\"}",
+			want:  "{\"key\": \"value\"}",
 		},
 		{
 			name:  "带 markdown 代码块",
-			input: "```json\n{\"key\": \"value\"}\n```",
-			want:  `{"key": "value"}`,
+			input: "\x60\x60\x60json\n{\"key\": \"value\"}\n\x60\x60\x60",
+			want:  "{\"key\": \"value\"}",
 		},
 		{
 			name:  "带前后文本",
 			input: "这是结果：{\"key\": \"value\"} 完成",
-			want:  `{"key": "value"}`,
+			want:  "{\"key\": \"value\"}",
 		},
 	}
 
@@ -149,12 +107,12 @@ func TestFormatIdentities(t *testing.T) {
 }
 
 func TestAnalyzeTranscriptHappyPath(t *testing.T) {
-	svc := newTestAIService(t, chatHandler(
-		func() string { return `{"identity_id":"i1","confidence":0.9}` },
-		func() string {
-			return `{"todos":[{"text":"买菜"}],"commitments":[{"text":"帮小王改方案","from":"我","to":"小王"}],"notes":["会议定在周三"]}`
+	svc := newFakeAIService(
+		func() (string, error) { return "{\"identity_id\":\"i1\",\"confidence\":0.9}", nil },
+		func() (string, error) {
+			return "{\"todos\":[{\"text\":\"买菜\"}],\"commitments\":[{\"text\":\"帮小王改方案\",\"from\":\"我\",\"to\":\"小王\"}],\"notes\":[\"会议定在周三\"]}", nil
 		},
-	), 0.6)
+	)
 	res, err := svc.AnalyzeTranscript(context.Background(), "开会说下周一交报告", []model.Identity{{ID: "i1", Name: "工作"}, {ID: "i2", Name: "家庭"}})
 	require.NoError(t, err)
 	require.NotNil(t, res.IdentityID)
@@ -168,10 +126,10 @@ func TestAnalyzeTranscriptHappyPath(t *testing.T) {
 }
 
 func TestAnalyzeTranscriptLowConfidence(t *testing.T) {
-	svc := newTestAIService(t, chatHandler(
-		func() string { return `{"identity_id":"i1","confidence":0.5}` },
-		func() string { return `{"todos":[],"commitments":[],"notes":[]}` },
-	), 0.6)
+	svc := newFakeAIService(
+		func() (string, error) { return "{\"identity_id\":\"i1\",\"confidence\":0.5}", nil },
+		func() (string, error) { return "{\"todos\":[],\"commitments\":[],\"notes\":[]}", nil },
+	)
 	res, err := svc.AnalyzeTranscript(context.Background(), "随便聊聊", []model.Identity{{ID: "i1", Name: "工作"}})
 	require.NoError(t, err)
 	assert.Nil(t, res.IdentityID)
@@ -179,10 +137,10 @@ func TestAnalyzeTranscriptLowConfidence(t *testing.T) {
 }
 
 func TestAnalyzeTranscriptNonCandidateIdentity(t *testing.T) {
-	svc := newTestAIService(t, chatHandler(
-		func() string { return `{"identity_id":"i999","confidence":0.9}` },
-		func() string { return `{"todos":[],"commitments":[],"notes":[]}` },
-	), 0.6)
+	svc := newFakeAIService(
+		func() (string, error) { return "{\"identity_id\":\"i999\",\"confidence\":0.9}", nil },
+		func() (string, error) { return "{\"todos\":[],\"commitments\":[],\"notes\":[]}", nil },
+	)
 	res, err := svc.AnalyzeTranscript(context.Background(), "开会", []model.Identity{{ID: "i1", Name: "工作"}})
 	require.NoError(t, err)
 	assert.Nil(t, res.IdentityID)
@@ -190,16 +148,16 @@ func TestAnalyzeTranscriptNonCandidateIdentity(t *testing.T) {
 
 func TestAnalyzeTranscriptInvalidJSONThenRetry(t *testing.T) {
 	identityCalls := 0
-	svc := newTestAIService(t, chatHandler(
-		func() string {
+	svc := newFakeAIService(
+		func() (string, error) {
 			identityCalls++
 			if identityCalls == 1 {
-				return "这不是合法 JSON"
+				return "这不是合法 JSON", nil
 			}
-			return `{"identity_id":"i1","confidence":0.9}`
+			return "{\"identity_id\":\"i1\",\"confidence\":0.9}", nil
 		},
-		func() string { return `{"todos":[],"commitments":[],"notes":[]}` },
-	), 0.6)
+		func() (string, error) { return "{\"todos\":[],\"commitments\":[],\"notes\":[]}", nil },
+	)
 	res, err := svc.AnalyzeTranscript(context.Background(), "开会", []model.Identity{{ID: "i1", Name: "工作"}})
 	require.NoError(t, err)
 	require.NotNil(t, res.IdentityID)
@@ -208,7 +166,7 @@ func TestAnalyzeTranscriptInvalidJSONThenRetry(t *testing.T) {
 }
 
 func TestAnalyzeTranscriptEmptyTranscript(t *testing.T) {
-	svc := newAIService("http://unused", "", "m", &http.Client{}, 0.6)
+	svc := newAIService(&fakeLLM{name: "m"}, 0.6)
 	_, err := svc.AnalyzeTranscript(context.Background(), "   ", nil)
 	require.Error(t, err)
 }
