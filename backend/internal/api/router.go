@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/chaojixinren/pulse/internal/config"
 	"github.com/chaojixinren/pulse/internal/middleware"
@@ -18,7 +19,7 @@ import (
 func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) (*gin.Engine, *worker.AudioProcessor) {
 	gin.SetMode(cfg.GINMode)
 	r := gin.New()
-	r.Use(middleware.Logger(), middleware.ErrorHandler(), middleware.CORS(cfg.AllowedOrigins))
+	r.Use(middleware.Trace(), middleware.Logger(), middleware.Metrics(), middleware.ErrorHandler(), middleware.CORS(cfg.AllowedOrigins))
 
 	// repositories
 	userRepo := repository.NewUserRepo(db)
@@ -50,6 +51,7 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) (*gin.Engine, 
 	processor := worker.NewAudioProcessor(sessionRepo, sttService, rdb, identityRepo, aiService, cfg.AudioEncryptionKey)
 
 	r.GET("/health", healthHandler.Check)
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	v1 := r.Group("/api/v1")
 	{

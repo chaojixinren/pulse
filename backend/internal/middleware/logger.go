@@ -16,12 +16,16 @@ func Logger() gin.HandlerFunc {
 		path := c.Request.URL.Path
 		c.Next()
 
-		logger.Log.Info("http_request",
+		fields := []zap.Field{
 			zap.String("method", c.Request.Method),
 			zap.String("path", path),
 			zap.Int("status", c.Writer.Status()),
 			zap.Duration("latency", time.Since(start)),
 			zap.String("client_ip", c.ClientIP()),
-		)
+		}
+		if rid := c.GetString(CtxRequestID); rid != "" {
+			fields = append(fields, zap.String("request_id", rid))
+		}
+		logger.Log.Info("http_request", fields...)
 	}
 }
