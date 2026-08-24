@@ -73,6 +73,8 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) (*gin.Engine, 
 			authed.PUT("/identities/:id/default", identityHandler.SetDefault)
 			authed.GET("/timeline", timelineHandler.List)
 			authed.GET("/reports/daily", reportHandler.Daily)
+			authed.GET("/reports/weekly", reportHandler.Weekly)
+			authed.GET("/reports/stats", reportHandler.Stats)
 
 			authed.POST("/devices/bind-code", deviceHandler.GenerateBindCode)
 			authed.POST("/devices/bind", deviceHandler.Bind)

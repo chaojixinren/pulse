@@ -255,3 +255,57 @@ func (r *AudioSessionRepo) StatsByUser(ctx context.Context, userID string, from,
 	}
 	return out, rows.Err()
 }
+
+// DailyTrendRow 按天聚合的一行结果（date 为 YYYY-MM-DD）。
+type DailyTrendRow struct {
+	Date          string
+	SessionCount  int
+	TotalDuration int
+}
+
+// DailyTrendByUser 按天聚合会话数与时长，返回按日期升序的点。
+func (r *AudioSessionRepo) DailyTrendByUser(ctx context.Context, userID string, from, to time.Time) ([]DailyTrendRow, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT DATE_FORMAT(recorded_at, '%Y-%m-%d') AS d,
+		       COUNT(*) AS cnt,
+		       COALESCE(CAST(SUM(duration) AS SIGNED), 0) AS total_duration
+		FROM audio_sessions
+		WHERE user_id = ? AND recorded_at >= ? AND recorded_at < ?
+		GROUP BY DATE_FORMAT(recorded_at, '%Y-%m-%d')
+		ORDER BY d ASC`, userID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]DailyTrendRow, 0)
+	for rows.Next() {
+		var row DailyTrendRow
+		if err := rows.Scan(&row.Date, &row.SessionCount, &row.TotalDuration); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
+// ExtractedDataInRange 返回区间内所有会话的 extracted_data JSON 原文，用于聚合待办/承诺。
+func (r *AudioSessionRepo) ExtractedDataInRange(ctx context.Context, userID string, from, to time.Time) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT extracted_data FROM audio_sessions
+		 WHERE user_id = ? AND recorded_at >= ? AND recorded_at < ?`, userID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]string, 0)
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
