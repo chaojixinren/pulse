@@ -17,24 +17,26 @@ import (
 
 // AudioProcessor 轮询 pending 会话并执行转写。
 type AudioProcessor struct {
-	sessions   *repository.AudioSessionRepo
-	stt        *service.SttService
-	redis      *redis.Client
-	identities *repository.IdentityRepo
-	ai         *service.AIService
-	interval   time.Duration
-	batchSize  int
+	sessions      *repository.AudioSessionRepo
+	stt           *service.SttService
+	redis         *redis.Client
+	identities    *repository.IdentityRepo
+	ai            *service.AIService
+	encryptionKey []byte
+	interval      time.Duration
+	batchSize     int
 }
 
-func NewAudioProcessor(sessions *repository.AudioSessionRepo, stt *service.SttService, rdb *redis.Client, identities *repository.IdentityRepo, ai *service.AIService) *AudioProcessor {
+func NewAudioProcessor(sessions *repository.AudioSessionRepo, stt *service.SttService, rdb *redis.Client, identities *repository.IdentityRepo, ai *service.AIService, encryptionKey []byte) *AudioProcessor {
 	return &AudioProcessor{
-		sessions:   sessions,
-		stt:        stt,
-		redis:      rdb,
-		identities: identities,
-		ai:         ai,
-		interval:   5 * time.Second,
-		batchSize:  5,
+		sessions:      sessions,
+		stt:           stt,
+		redis:         rdb,
+		identities:    identities,
+		ai:            ai,
+		encryptionKey: encryptionKey,
+		interval:      5 * time.Second,
+		batchSize:     5,
 	}
 }
 
@@ -82,7 +84,22 @@ func (w *AudioProcessor) processOne(ctx context.Context, sess *model.AudioSessio
 	if sess.AudioMime != nil {
 		mime = *sess.AudioMime
 	}
-	text, err := w.stt.Transcribe(ctx, sess.AudioData, service.FilenameForMime(mime))
+
+	// Phase 3 模块 2：转写前解密音频（配置密钥时）。
+	audio := sess.AudioData
+	if len(w.encryptionKey) > 0 {
+		decrypted, derr := service.DecryptAudio(sess.AudioData, w.encryptionKey)
+		if derr != nil {
+			log.Error("解密音频失败", zap.Error(derr))
+			if uerr := w.sessions.UpdateStatus(ctx, sess.ID, model.StatusFailed, "音频解密失败: "+derr.Error()); uerr != nil {
+				log.Error("更新失败状态出错", zap.Error(uerr))
+			}
+			return
+		}
+		audio = decrypted
+	}
+
+	text, err := w.stt.Transcribe(ctx, audio, service.FilenameForMime(mime))
 	if err != nil {
 		log.Error("转写失败", zap.Error(err))
 		if uerr := w.sessions.UpdateStatus(ctx, sess.ID, model.StatusFailed, err.Error()); uerr != nil {

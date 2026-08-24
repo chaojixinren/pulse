@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"strconv"
@@ -35,6 +36,9 @@ type Config struct {
 
 	MaxAudioSize       int64
 	AudioRetentionDays int
+
+	// AudioEncryptionKey 为 AES-256-GCM 的 32 字节密钥（base64 解码后）；空表示关闭加密存储。
+	AudioEncryptionKey []byte
 }
 
 // Load 从 .env 与环境变量读取配置并校验。
@@ -70,6 +74,11 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("AI_CONFIDENCE_THRESHOLD 配置无效: %w", err)
 	}
 
+	encKey, err := decodeEncryptionKey(os.Getenv("AUDIO_ENCRYPTION_KEY"))
+	if err != nil {
+		return nil, err
+	}
+
 	cfg := &Config{
 		Port:                  getEnv("PORT", "8080"),
 		GINMode:               getEnv("GIN_MODE", "debug"),
@@ -89,12 +98,29 @@ func Load() (*Config, error) {
 		LogLevel:              getEnv("LOG_LEVEL", "info"),
 		MaxAudioSize:          maxAudioSize,
 		AudioRetentionDays:    retention,
+		AudioEncryptionKey:    encKey,
 	}
 
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+// decodeEncryptionKey 将 base64 编码的 32 字节密钥解码为 []byte；空值返回 nil（关闭加密）。
+func decodeEncryptionKey(s string) ([]byte, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
+	}
+	key, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		return nil, fmt.Errorf("AUDIO_ENCRYPTION_KEY 无效：应为 base64 编码的 32 字节密钥: %w", err)
+	}
+	if len(key) != 32 {
+		return nil, fmt.Errorf("AUDIO_ENCRYPTION_KEY 长度应为 32 字节（AES-256），当前 %d 字节", len(key))
+	}
+	return key, nil
 }
 
 func (c *Config) validate() error {

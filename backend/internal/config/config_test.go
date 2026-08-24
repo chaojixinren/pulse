@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"testing"
 	"time"
 
@@ -119,4 +120,29 @@ func TestLoadInvalidAIConfidenceThreshold(t *testing.T) {
 	_, err := Load()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "AI_CONFIDENCE_THRESHOLD")
+}
+
+func TestDecodeEncryptionKey(t *testing.T) {
+	// 空 → nil（关闭加密）。
+	key, err := decodeEncryptionKey("")
+	require.NoError(t, err)
+	assert.Nil(t, key)
+
+	// 32 字节 base64 → 原样解码。
+	raw := make([]byte, 32)
+	for i := range raw {
+		raw[i] = byte(i)
+	}
+	key, err = decodeEncryptionKey(base64.StdEncoding.EncodeToString(raw))
+	require.NoError(t, err)
+	assert.Equal(t, raw, key)
+
+	// 非法 base64 → 报错。
+	_, err = decodeEncryptionKey("!!!not-base64!!!")
+	require.Error(t, err)
+
+	// 长度不足 32 字节 → 报错。
+	_, err = decodeEncryptionKey(base64.StdEncoding.EncodeToString([]byte("too-short")))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "32 字节")
 }

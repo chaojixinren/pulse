@@ -2,6 +2,8 @@ package worker
 
 import (
 	"context"
+	"encoding/base64"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -160,4 +162,62 @@ func TestAudioProcessorAnalyzeWithoutAI(t *testing.T) {
 	w.analyze(context.Background(), sess, "明天买菜")
 
 	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// newCaptureSTT 返回一个会捕获请求体（音频字节）的假 STT 服务。
+func newCaptureSTT(t *testing.T) (*service.SttService, chan []byte) {
+	t.Helper()
+	ch := make(chan []byte, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		ch <- body
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`data: {"type":"transcript.text.done","text":"ok"}` + "\n\n"))
+	}))
+	t.Cleanup(srv.Close)
+	return service.NewSttService(&config.Config{
+		StepFunBaseURL:  srv.URL,
+		StepFunAPIKey:   "test-key",
+		StepFunSTTModel: "test-model",
+	}), ch
+}
+
+func TestAudioProcessorDecryptsBeforeTranscribe(t *testing.T) {
+	repo, mock := newWorkerMockDB(t)
+	stt, captured := newCaptureSTT(t)
+
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i)
+	}
+	plain := []byte("plain audio bytes")
+	enc, err := service.EncryptAudio(plain, key)
+	require.NoError(t, err)
+
+	w := &AudioProcessor{sessions: repo, stt: stt, redis: nil, encryptionKey: key}
+
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE audio_sessions SET status = ?")).
+		WithArgs("processing", sqlmock.AnyArg(), "s1", "pending", "processing").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE audio_sessions SET transcript")).
+		WithArgs("ok", sqlmock.AnyArg(), "s1").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT status FROM audio_sessions WHERE id = ? FOR UPDATE")).
+		WithArgs("s1").
+		WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("processing"))
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE audio_sessions SET status = ?, error_message = ?")).
+		WithArgs("completed", nil, sqlmock.AnyArg(), "completed", "completed", sqlmock.AnyArg(), "s1").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	sess := &model.AudioSession{ID: "s1", AudioData: enc, AudioMime: strPtr("audio/wav")}
+	w.processOne(context.Background(), sess)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+
+	body := <-captured
+	assert.Contains(t, string(body), base64.StdEncoding.EncodeToString(plain), "STT 请求体应包含明文音频的 base64")
+	assert.NotContains(t, string(body), base64.StdEncoding.EncodeToString(enc), "STT 请求体不应包含密文")
 }

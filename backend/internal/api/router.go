@@ -46,7 +46,7 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) (*gin.Engine, 
 	deviceHandler := NewDeviceHandler(deviceService)
 
 	// worker
-	processor := worker.NewAudioProcessor(sessionRepo, sttService, rdb, identityRepo, aiService)
+	processor := worker.NewAudioProcessor(sessionRepo, sttService, rdb, identityRepo, aiService, cfg.AudioEncryptionKey)
 
 	r.GET("/health", healthHandler.Check)
 

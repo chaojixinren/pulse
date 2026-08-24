@@ -2,7 +2,12 @@ package service
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 	"time"
@@ -31,6 +36,41 @@ type AudioService struct {
 
 func NewAudioService(cfg *config.Config, sessions *repository.AudioSessionRepo) *AudioService {
 	return &AudioService{cfg: cfg, sessions: sessions}
+}
+
+// EncryptAudio 使用 AES-256-GCM 加密音频，返回 nonce || ciphertext。
+// key 必须为 32 字节；调用方应在 key 为空时跳过加密。
+func EncryptAudio(data, key []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, err
+	}
+	return gcm.Seal(nonce, nonce, data, nil), nil
+}
+
+// DecryptAudio 解密 EncryptAudio 产生的密文（nonce || ciphertext）。
+func DecryptAudio(data, key []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	ns := gcm.NonceSize()
+	if len(data) < ns {
+		return nil, errors.New("密文过短，无法解密")
+	}
+	return gcm.Open(nil, data[:ns], data[ns:], nil)
 }
 
 var allowedAudioExt = map[string]bool{
@@ -100,11 +140,21 @@ func (s *AudioService) Upload(ctx context.Context, userID string, in UploadInput
 		mime = in.ContentType
 	}
 
+	// Phase 3 模块 2：音频落库前 AES-256-GCM 加密（配置密钥时）。
+	stored := in.Data
+	if len(s.cfg.AudioEncryptionKey) > 0 {
+		encrypted, err := EncryptAudio(in.Data, s.cfg.AudioEncryptionKey)
+		if err != nil {
+			return nil, apperrors.WrapInternal(err)
+		}
+		stored = encrypted
+	}
+
 	session := &model.AudioSession{
 		ID:            utils.NewUUID(),
 		UserID:        userID,
 		DeviceID:      deviceID,
-		AudioData:     in.Data,
+		AudioData:     stored,
 		AudioMime:     &mime,
 		Duration:      in.Duration,
 		FileSize:      &fileSize,
