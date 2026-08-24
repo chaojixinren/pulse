@@ -95,7 +95,7 @@ backend/
 ```
 
 > 说明：Phase 1 与 Phase 2 已按上表落地；各目录内 `_test.go` 为对应单元/集成测试（与源文件同目录）。
-> Phase 3 规划的 `middleware/ratelimit`、`api/export`、加密存储与可观测性模块尚未实现，详见 [Phase 3：生产化](phase-3-production.md)。
+> Phase 3（生产化）已落地：报告增强（周报/统计 + Redis 缓存）、音频 AES-256-GCM 加密、数据删除/导出、Redis 限流、request_id 链路 + Prometheus 指标。详见 [Phase 3：生产化](phase-3-production.md)。
 
 ## 分层约定
 

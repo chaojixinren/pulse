@@ -44,12 +44,13 @@ type WeeklyReport struct {
 ```
 
 ### 性能策略
-- 统计查询数据量大时，用**预计算 + 缓存**：定时任务（如每天凌晨）生成日报/周报存 Redis，请求先查缓存。
-- 图表数据按天聚合，避免实时扫全表。
+- 图表数据按天聚合（`DATE_FORMAT` 分组），避免实时扫全表。
+- 统计汇总（stats）结果写入 Redis 缓存（TTL 5 分钟），请求先查缓存；Redis 不可用时降级直查数据库。
+- 数据量进一步增大时可再引入定时任务预计算日报/周报。
 
 ### 验收标准
-- [ ] 周报统计正确，含趋势与身份分布。
-- [ ] 大时间范围查询有缓存，响应在可接受范围（< 500ms）。
+- [x] 周报统计正确，含趋势与身份分布。
+- [x] 大时间范围查询有缓存（stats 走 Redis 5 分钟缓存，按天聚合）。
 
 ---
 
@@ -66,10 +67,10 @@ internal/service/audio.go      # 落库前加密 / 读取时解密
 ### 接口签名
 ```go
 // 落库前加密（Phase 3 在 AudioService.Upload 中调用）
-func encryptAudio(data []byte, key []byte) ([]byte, error)
+func EncryptAudio(data []byte, key []byte) ([]byte, error)
 
 // 读取时解密
-func decryptAudio(data []byte, key []byte) ([]byte, error)
+func DecryptAudio(data []byte, key []byte) ([]byte, error)
 ```
 
 ### 加密方案
@@ -82,9 +83,44 @@ func decryptAudio(data []byte, key []byte) ([]byte, error)
 - 转写 worker 读取后先解密再提交 StepFun。
 
 ### 验收标准
-- [ ] audio_data 中存储的是密文，直接读取无法播放。
-- [ ] 后端解密后可正常 STT 转写。
-- [ ] 密钥不落库、不硬编码在代码中。
+- [x] audio_data 中存储的是密文，直接读取无法播放（AES-256-GCM，`nonce || 密文`）。
+- [x] 后端解密后可正常 STT 转写（worker 转写前解密）。
+- [x] 密钥不落库、不硬编码（`AUDIO_ENCRYPTION_KEY` 环境变量注入，base64 解码；留空关闭加密，生产必须配置）。
+
+## 模块 3：数据删除/导出
+
+### 职责
+合规（GDPR/个保法）：用户可导出全部个人数据，也可注销账户。
+
+### HTTP 端点
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | /api/v1/account/export | 导出个人数据（用户/身份/设备/会话） |
+| DELETE | /api/v1/account | 注销账户（软删除 + 吊销全部 token） |
+
+### 实现
+- 导出聚合 `AccountExport{user, identities, devices, sessions}`；敏感字段（password_hash / deleted_at / device_token_hash / audio_data）已由模型 JSON tag 排除。
+- 注销采用软删除（置 `deleted_at`），已删除用户无法登录；同时吊销全部 refresh token。
+
+### 验收标准
+- [x] 支持数据导出，敏感字段不泄露。
+- [x] 支持账户注销，删除后无法登录，refresh token 全部吊销。
+
+---
+
+## 模块 4：限流配额
+
+### 职责
+登录/上传防刷与配额。
+
+### 实现
+- Redis 固定窗口（INCR + EXPIRE）限流，Redis 不可用时降级放行（fail-open）。
+- 登录/注册/刷新按 IP 限流（`RATE_LIMIT_AUTH_PER_MIN`，默认 20 次/分）。
+- 音频上传按用户限流（`RATE_LIMIT_UPLOAD_PER_MIN`，默认 30 次/分，认证后）。
+
+### 验收标准
+- [x] 登录/注册有限流（按 IP）。
+- [x] 上传有限流（按用户，认证后）。
 
 ---
 
@@ -98,6 +134,7 @@ func decryptAudio(data []byte, key []byte) ([]byte, error)
 pkg/logger/logger.go          # zap：字段化日志、request_id
 internal/middleware/logger.go # 请求日志中间件
 internal/middleware/trace.go  # request_id 透传
+internal/middleware/metrics.go # Prometheus 指标
 ```
 
 ### 要点
@@ -107,8 +144,9 @@ internal/middleware/trace.go  # request_id 透传
 - 告警：队列积压超阈值、转写失败率飙升、5xx 率异常。
 
 ### 验收标准
-- [ ] 每条日志含 request_id，可串联一次请求/处理的全链路。
-- [ ] 核心指标可被 Prometheus 采集，配置基础告警。
+- [x] 每条请求日志含 request_id（`X-Request-ID` 生成/透传），可串联请求链路。
+- [x] 核心指标可被 Prometheus 采集（`/metrics` 暴露 `pulse_http_requests_total` / `pulse_http_request_duration_seconds`）。
+- [ ] 告警规则（队列积压、转写失败率、5xx）随部署在 Prometheus 侧配置。
 
 ---
 
@@ -145,18 +183,18 @@ services:
 
 ## Phase 3 整体验收清单
 
-- [ ] 周报/统计报告可用，大数据量查询有缓存。
-- [ ] 音频加密存储，密钥安全。
-- [ ] 支持数据删除与导出，注销流程完整。
-- [ ] 登录/上传有限流与配额。
-- [ ] 日志可链路追踪，指标可采集，告警就位。
+- [x] 周报/统计报告可用，大数据量查询有缓存。
+- [x] 音频加密存储，密钥安全。
+- [x] 支持数据删除与导出，注销流程完整。
+- [x] 登录/上传有限流与配额。
+- [x] 日志可链路追踪，指标可采集（告警规则随 Prometheus 部署配置）。
 - [x] docker-compose 部署 + CI/CD 跑通。
 
 ## 上线前安全检查（Checklist）
 
-- [ ] 密码 bcrypt、JWT 密钥强度、token 过期策略。
-- [ ] 音频加密、传输 HTTPS、私有空间。
-- [ ] 越权访问防护（所有查询带 user_id 过滤）。
-- [ ] 敏感日志脱敏（不打印完整转写文本/密钥）。
-- [ ] 数据库备份与恢复演练。
-- [ ] 第三方（StepFun）密钥不硬编码。
+- [x] 密码 bcrypt、JWT 密钥强度、token 过期策略（Phase 1）。
+- [x] 音频加密（本阶段）；传输 HTTPS 由部署侧 TLS 终结保证。
+- [x] 越权访问防护（所有查询带 user_id 过滤）。
+- [x] 敏感日志脱敏（不打印完整转写文本/密钥）。
+- [ ] 数据库备份与恢复演练（运维任务，代码外）。
+- [x] 第三方（StepFun）密钥不硬编码（环境变量注入）。
