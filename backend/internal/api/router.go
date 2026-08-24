@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
@@ -54,9 +55,9 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) (*gin.Engine, 
 	{
 		auth := v1.Group("/auth")
 		{
-			auth.POST("/register", authHandler.Register)
-			auth.POST("/login", authHandler.Login)
-			auth.POST("/refresh", authHandler.Refresh)
+			auth.POST("/register", middleware.RateLimitByIP(rdb, "auth", cfg.RateLimitAuthPerMin, time.Minute), authHandler.Register)
+			auth.POST("/login", middleware.RateLimitByIP(rdb, "auth", cfg.RateLimitAuthPerMin, time.Minute), authHandler.Login)
+			auth.POST("/refresh", middleware.RateLimitByIP(rdb, "auth", cfg.RateLimitAuthPerMin, time.Minute), authHandler.Refresh)
 			auth.POST("/logout", authHandler.Logout)
 			auth.GET("/me", middleware.Auth(cfg), authHandler.Me)
 		}
@@ -64,7 +65,7 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) (*gin.Engine, 
 		authed := v1.Group("")
 		authed.Use(middleware.Auth(cfg))
 		{
-			authed.POST("/audio/upload", audioHandler.Upload)
+			authed.POST("/audio/upload", middleware.RateLimitByUser(rdb, "upload", cfg.RateLimitUploadPerMin, time.Minute), audioHandler.Upload)
 			authed.POST("/audio/:id/retry", audioHandler.Retry)
 			authed.GET("/identities", identityHandler.List)
 			authed.POST("/identities", identityHandler.Create)
