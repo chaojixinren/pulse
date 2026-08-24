@@ -59,6 +59,11 @@ services:
       STEPFUN_API_KEY: "${STEPFUN_API_KEY:-}"
       STEPFUN_API_BASE: "${STEPFUN_API_BASE:-https://api.stepfun.com/v1}"
       STEPFUN_STT_MODEL: "${STEPFUN_STT_MODEL:-stepaudio-2.5-asr}"
+      # 音频加密存储（AES-256-GCM）：32 字节密钥的 base64 编码；留空关闭加密（生产必须配置）。
+      AUDIO_ENCRYPTION_KEY: "${AUDIO_ENCRYPTION_KEY:-}"
+      # 限流配额（次/分钟）
+      RATE_LIMIT_AUTH_PER_MIN: "${RATE_LIMIT_AUTH_PER_MIN:-20}"
+      RATE_LIMIT_UPLOAD_PER_MIN: "${RATE_LIMIT_UPLOAD_PER_MIN:-30}"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
       ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-}"
     ports:

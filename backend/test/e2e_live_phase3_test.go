@@ -20,6 +20,7 @@ import (
 
 	"github.com/chaojixinren/pulse/internal/api"
 	"github.com/chaojixinren/pulse/internal/config"
+	"github.com/chaojixinren/pulse/internal/service"
 )
 
 // setupPhase3 打开真实 DB/Redis，构造路由并清理限流键，隔离各用例。
@@ -120,4 +121,66 @@ func TestLiveE2EPhase3RateLimit(t *testing.T) {
 		last = resp.StatusCode
 	}
 	assert.Equal(t, http.StatusTooManyRequests, last, "超过限额应返回 429（register: %v）", reg)
+}
+
+// TestLiveE2EPhase3Encryption 验收「audio_data 中存储的是密文」：
+// 配置 AUDIO_ENCRYPTION_KEY 后上传音频，直接读取数据库中的 audio_data 应为密文且可解密回原文。
+func TestLiveE2EPhase3Encryption(t *testing.T) {
+	dsn := os.Getenv("TEST_DATABASE_DSN")
+	redisURL := os.Getenv("TEST_REDIS_URL")
+	if dsn == "" || redisURL == "" {
+		t.Skip("跳过真实基础设施 e2e：需设置 TEST_DATABASE_DSN 与 TEST_REDIS_URL")
+	}
+
+	db, err := config.InitDB(dsn)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	rdb, err := config.InitRedis(redisURL)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i)
+	}
+
+	cfg := &config.Config{
+		JWTSecret:             "live-e2e-phase3-enc-secret",
+		GINMode:               gin.TestMode,
+		MaxAudioSize:          1024 * 1024,
+		JWTExpiresIn:          time.Hour,
+		RefreshTokenTTL:       7 * 24 * time.Hour,
+		AudioEncryptionKey:    key,
+		RateLimitAuthPerMin:   100,
+		RateLimitUploadPerMin: 100,
+	}
+	router, _ := api.NewRouter(cfg, db, rdb)
+	srv := httptest.NewServer(router)
+	t.Cleanup(srv.Close)
+
+	email := fmt.Sprintf("e2e-p3-enc-%d@example.com", time.Now().UnixNano())
+	c := &liveClient{base: srv.URL}
+	defer func() { _, _ = db.Exec("DELETE FROM users WHERE email = ?", email) }()
+
+	_, _ = c.json(t, http.MethodPost, "/api/v1/auth/register", map[string]string{"email": email, "password": "secret123", "name": "Enc"})
+	_, login := c.json(t, http.MethodPost, "/api/v1/auth/login", map[string]string{"email": email, "password": "secret123"})
+	c.token = login["data"].(map[string]interface{})["access_token"].(string)
+	require.NotEmpty(t, c.token, "login: %v", login)
+
+	plain := []byte{'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'A', 'V', 'E', 'f', 'm', 't', ' '}
+	resp, up := c.upload(t, "clip.wav", plain, map[string]string{"duration": "10"})
+	require.Equal(t, http.StatusOK, resp.StatusCode, "upload: %v", up)
+	sessionID := up["data"].(map[string]interface{})["session_id"].(string)
+	require.NotEmpty(t, sessionID)
+
+	// 直接读取数据库中落库的 audio_data。
+	var stored []byte
+	err = db.QueryRow("SELECT audio_data FROM audio_sessions WHERE id = ?", sessionID).Scan(&stored)
+	require.NoError(t, err)
+	assert.NotEqual(t, plain, stored, "audio_data 应存储密文而非明文")
+
+	dec, err := service.DecryptAudio(stored, key)
+	require.NoError(t, err)
+	assert.Equal(t, plain, dec, "密文应可解密回原文")
 }

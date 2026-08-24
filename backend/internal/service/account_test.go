@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/chaojixinren/pulse/internal/model"
 	"github.com/chaojixinren/pulse/internal/repository"
 	apperrors "github.com/chaojixinren/pulse/pkg/errors"
 )
@@ -93,4 +94,47 @@ func TestAccountDelete(t *testing.T) {
 
 	require.NoError(t, svc.Delete(context.Background(), "u1"))
 	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestAccountExportJSONExcludesSensitiveFields 验收「敏感字段不泄露」：
+// password_hash / deleted_at / device_token_hash / audio_data 均通过 json:"-" 排除，
+// 序列化导出结构后这些字段名及其值都不应出现。
+func TestAccountExportJSONExcludesSensitiveFields(t *testing.T) {
+	now := time.Now().UTC()
+	deleted := now
+	transcript := "转录文本"
+	export := &AccountExport{
+		User: model.User{
+			ID: "u1", Email: "a@b.com", PasswordHash: "bcrypt-hash-value",
+			Name: "Alice", CreatedAt: now, UpdatedAt: now, DeletedAt: &deleted,
+		},
+		Identities: []model.Identity{{ID: "i1", UserID: "u1", Name: "Work"}},
+		Devices: []model.Device{{
+			ID: "d1", UserID: "u1", DeviceID: "dev-1", Name: "手表",
+			DeviceTokenHash: "device-token-hash-value",
+		}},
+		Sessions: []model.AudioSession{{
+			ID: "s1", UserID: "u1", AudioData: []byte("top-secret-audio-bytes"),
+			Transcript: &transcript, Status: model.StatusCompleted,
+		}},
+	}
+
+	b, err := json.Marshal(export)
+	require.NoError(t, err)
+	body := string(b)
+
+	// 字段名与敏感值都不应泄露。
+	for _, forbidden := range []string{
+		"password_hash", "bcrypt-hash-value",
+		"deleted_at",
+		"device_token_hash", "device-token-hash-value",
+		"audio_data", "top-secret-audio-bytes",
+	} {
+		assert.NotContains(t, body, forbidden, "导出 JSON 不应包含 %q", forbidden)
+	}
+
+	// 非敏感字段仍应正常输出。
+	assert.Contains(t, body, "a@b.com")
+	assert.Contains(t, body, "Alice")
+	assert.Contains(t, body, "转录文本")
 }

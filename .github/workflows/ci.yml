@@ -77,6 +77,8 @@ jobs:
             pattern: TestLiveE2EFullFlow
           - suite: phase2
             pattern: TestLiveE2EPhase2Devices
+          - suite: phase3
+            pattern: TestLiveE2EPhase3
     services:
       mysql:
         image: mysql:8.0

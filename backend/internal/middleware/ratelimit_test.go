@@ -72,3 +72,21 @@ func TestRateLimitByUserUsesUserID(t *testing.T) {
 	r.ServeHTTP(w2, newRateReq())
 	assert.Equal(t, http.StatusTooManyRequests, w2.Code, "同一 user_id 共享配额")
 }
+
+// TestRateLimitRedisErrorFailsOpen 验收「Redis 不可用时降级放行（fail-open）」：
+// Redis 连接断开导致 INCR 报错时，中间件应放行而非阻断请求。
+func TestRateLimitRedisErrorFailsOpen(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	mr.Close() // 关闭 Redis，模拟不可用
+	defer rdb.Close()
+
+	r := gin.New()
+	r.GET("/x", RateLimitByIP(rdb, "auth", 1, time.Minute), func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, newRateReq())
+	assert.Equal(t, http.StatusOK, w.Code, "Redis 不可用时应降级放行（fail-open）")
+}
