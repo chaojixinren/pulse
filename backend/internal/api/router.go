@@ -37,6 +37,7 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) (*gin.Engine, 
 	reportService := service.NewReportService(sessionRepo, identityRepo)
 	aiService := service.NewAIService(cfg)
 	deviceService := service.NewDeviceService(deviceRepo)
+	accountService := service.NewAccountService(userRepo, identityRepo, deviceRepo, sessionRepo, tokenRepo)
 
 	// handlers
 	healthHandler := NewHealthHandler(db, rdb)
@@ -46,6 +47,7 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) (*gin.Engine, 
 	timelineHandler := NewTimelineHandler(timelineService)
 	reportHandler := NewReportHandler(reportService)
 	deviceHandler := NewDeviceHandler(deviceService)
+	accountHandler := NewAccountHandler(accountService)
 
 	// worker
 	processor := worker.NewAudioProcessor(sessionRepo, sttService, rdb, identityRepo, aiService, cfg.AudioEncryptionKey)
@@ -78,6 +80,8 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) (*gin.Engine, 
 			authed.GET("/reports/daily", reportHandler.Daily)
 			authed.GET("/reports/weekly", reportHandler.Weekly)
 			authed.GET("/reports/stats", reportHandler.Stats)
+			authed.GET("/account/export", accountHandler.Export)
+			authed.DELETE("/account", accountHandler.Delete)
 
 			authed.POST("/devices/bind-code", deviceHandler.GenerateBindCode)
 			authed.POST("/devices/bind", deviceHandler.Bind)

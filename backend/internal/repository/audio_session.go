@@ -146,6 +146,26 @@ func (r *AudioSessionRepo) ClaimProcessing(ctx context.Context, id string) (bool
 	return n > 0, nil
 }
 
+// ListAllByUser 返回用户全部会话（摘要列，不含音频二进制），供数据导出。
+func (r *AudioSessionRepo) ListAllByUser(ctx context.Context, userID string) ([]model.AudioSession, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+sessionListColumns+` FROM audio_sessions WHERE user_id = ? ORDER BY recorded_at ASC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]model.AudioSession, 0)
+	for rows.Next() {
+		s, err := scanSessionSummary(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *s)
+	}
+	return out, rows.Err()
+}
+
 // ListProcessable 返回待处理的会话：pending，以及重试后重新进入 processing 的会话。
 func (r *AudioSessionRepo) ListProcessable(ctx context.Context, limit int) ([]model.AudioSession, error) {
 	rows, err := r.db.QueryContext(ctx,

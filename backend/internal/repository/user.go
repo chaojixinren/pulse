@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/chaojixinren/pulse/internal/model"
 )
@@ -46,4 +47,12 @@ func (r *UserRepo) GetByID(ctx context.Context, id string) (*model.User, error) 
 		return nil, nil
 	}
 	return u, err
+}
+
+// SoftDelete 软删除用户（置 deleted_at），用于注销；已删除用户无法再登录。
+func (r *UserRepo) SoftDelete(ctx context.Context, id string) error {
+	now := time.Now().UTC()
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE users SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`, now, now, id)
+	return err
 }
