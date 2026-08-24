@@ -3,8 +3,11 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"time"
+
+	"github.com/go-redis/redis/v8"
 
 	"github.com/chaojixinren/pulse/internal/model"
 	"github.com/chaojixinren/pulse/internal/repository"
@@ -60,11 +63,15 @@ type StatsReport struct {
 type ReportService struct {
 	sessions   *repository.AudioSessionRepo
 	identities *repository.IdentityRepo
+	rdb        *redis.Client
 }
 
-func NewReportService(sessions *repository.AudioSessionRepo, identities *repository.IdentityRepo) *ReportService {
-	return &ReportService{sessions: sessions, identities: identities}
+func NewReportService(sessions *repository.AudioSessionRepo, identities *repository.IdentityRepo, rdb *redis.Client) *ReportService {
+	return &ReportService{sessions: sessions, identities: identities, rdb: rdb}
 }
+
+// reportCacheTTL 统计结果在 Redis 中的缓存时长。
+const reportCacheTTL = 5 * time.Minute
 
 // reportLocation 报告按 Asia/Shanghai 时区聚合；无法加载时回退 UTC。
 func reportLocation() *time.Location {
@@ -276,16 +283,33 @@ func (s *ReportService) Stats(ctx context.Context, userID, from, to string) (*St
 		return nil, apperrors.NewBadRequest("起始日期不能晚于结束日期")
 	}
 
+	// 大范围统计走缓存，避免每次全量扫描。
+	cacheKey := fmt.Sprintf("report:stats:%s:%s:%s", userID, fromT.Format("2006-01-02"), toT.Format("2006-01-02"))
+	if s.rdb != nil {
+		if b, err := s.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
+			var cached StatsReport
+			if json.Unmarshal(b, &cached) == nil {
+				return &cached, nil
+			}
+		}
+	}
+
 	agg, err := s.aggregate(ctx, userID, fromT, toT.AddDate(0, 0, 1))
 	if err != nil {
 		return nil, err
 	}
-	return &StatsReport{
+	report := &StatsReport{
 		From:          fromT.Format("2006-01-02"),
 		To:            toT.Format("2006-01-02"),
 		SessionCount:  agg.sessionCount,
 		TotalDuration: agg.totalDuration,
 		ByIdentity:    agg.byIdentity,
 		DailyTrend:    agg.dailyTrend,
-	}, nil
+	}
+	if s.rdb != nil {
+		if b, err := json.Marshal(report); err == nil {
+			_ = s.rdb.Set(ctx, cacheKey, b, reportCacheTTL)
+		}
+	}
+	return report, nil
 }

@@ -34,7 +34,7 @@ func NewRouter(cfg *config.Config, db *sql.DB, rdb *redis.Client) (*gin.Engine, 
 	sttService := service.NewSttService(cfg)
 	identityService := service.NewIdentityService(identityRepo)
 	timelineService := service.NewTimelineService(sessionRepo)
-	reportService := service.NewReportService(sessionRepo, identityRepo)
+	reportService := service.NewReportService(sessionRepo, identityRepo, rdb)
 	aiService := service.NewAIService(cfg)
 	deviceService := service.NewDeviceService(deviceRepo)
 	accountService := service.NewAccountService(userRepo, identityRepo, deviceRepo, sessionRepo, tokenRepo)
