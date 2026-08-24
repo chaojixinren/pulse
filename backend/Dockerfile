@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---------- 构建阶段 ----------
-FROM golang:1.22-alpine AS build
+FROM golang:1.26.5-alpine AS build
 WORKDIR /src
 
 # 先复制依赖清单，利用 Docker 层缓存加速重复构建
