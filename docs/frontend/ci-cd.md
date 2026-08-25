@@ -14,6 +14,7 @@
 | 覆盖率 | `npm run test:coverage` | Vitest + v8 覆盖率 |
 | E2E | `npm run test:e2e` | Playwright（`e2e/` 目录） |
 | 构建 | `npm run build` | `tsc && vite build` |
+| Docker 构建 | `docker build -t pulse-frontend .` | 多阶段构建（node 构建 + nginx 托管），CI 含 SPA 回退与 `/api` 代理冒烟测试 |
 
 > 说明：`frontend/package.json` 已含 `dev/build/preview/lint/type-check/test/test:coverage/test:e2e` 脚本；测试框架（Vitest + RTL + Playwright）已接入。
 
@@ -113,9 +114,11 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
-    # 反向代理后端 API
+    # 反向代理后端 API（变量 + resolver 延迟解析，后端未就绪时 nginx 仍可启动）
     location /api/ {
-        proxy_pass http://backend:8080;
+        resolver 127.0.0.11 valid=30s ipv6=off;
+        set $backend http://backend:8080;
+        proxy_pass $backend;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }

@@ -6,6 +6,9 @@ const navItems = [
   { to: '/devices', label: '设备管理', icon: '📡' },
   { to: '/timeline', label: '时间线', icon: '🕒' },
   { to: '/reports/daily', label: '日报', icon: '📊' },
+  { to: '/reports/weekly', label: '周报', icon: '📅' },
+  { to: '/reports/stats', label: '统计', icon: '📈' },
+  { to: '/account', label: '账户设置', icon: '⚙️' },
 ];
 
 export function Sidebar() {
@@ -20,9 +23,7 @@ export function Sidebar() {
           <NavLink
             key={item.to}
             to={item.to}
-            className={({ isActive }) =>
-              `sidebar-link${isActive ? ' active' : ''}`
-            }
+            className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
           >
             <span>{item.icon}</span>
             <span>{item.label}</span>

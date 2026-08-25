@@ -23,6 +23,9 @@ describe('Sidebar', () => {
     expect(screen.getByRole('link', { name: /身份管理/ })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /时间线/ })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /日报/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /周报/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /统计/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /账户设置/ })).toBeInTheDocument();
   });
 
   it('折叠时不渲染', () => {

@@ -103,6 +103,23 @@ const timelineItems: TimelineItem[] = Array.from({ length: 25 }, (_, i) => {
   };
 });
 
+// 周报每日趋势（周一至周日）。
+const weeklyTrend = Array.from({ length: 7 }, (_, i) => ({
+  date: `2024-06-0${i + 3}`,
+  session_count: i + 1,
+  total_duration: (i + 1) * 1200,
+}));
+
+// 区间统计每日趋势（近 30 天）。
+const statsTrend = Array.from({ length: 30 }, (_, i) => {
+  const day = i + 1;
+  return {
+    date: `2024-05-${String(day).padStart(2, '0')}`,
+    session_count: (i % 5) + 1,
+    total_duration: ((i % 5) + 1) * 1800,
+  };
+});
+
 /**
  * 以 page.route 拦截所有 `/api/v1/**` 请求，提供确定性的内存后端。
  * 每个测试拥有独立的内存状态（每次调用重新创建闭包数据）。
@@ -214,6 +231,53 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<vo
         todos: ['整理产品需求文档'],
         notes: ['讨论了产品路线图'],
       });
+    }
+
+    // ---- 周报 ----
+    if (method === 'GET' && path === '/reports/weekly') {
+      const week = url.searchParams.get('week') ?? '';
+      return respond({
+        week,
+        session_count: 12,
+        total_duration: 14400,
+        by_identity: [
+          { identity_id: 'i1', name: '产品经理', session_count: 7, total_duration: 8400 },
+          { identity_id: 'i2', name: '健身教练', session_count: 5, total_duration: 6000 },
+        ],
+        top_todos: ['整理产品需求文档', '安排下周评审'],
+        commitments_done: 3,
+        daily_trend: weeklyTrend,
+      });
+    }
+
+    // ---- 区间统计 ----
+    if (method === 'GET' && path === '/reports/stats') {
+      const from = url.searchParams.get('from') ?? '';
+      const to = url.searchParams.get('to') ?? '';
+      return respond({
+        from,
+        to,
+        session_count: 42,
+        total_duration: 54000,
+        by_identity: [
+          { identity_id: 'i1', name: '产品经理', session_count: 24, total_duration: 30000 },
+          { identity_id: 'i2', name: '健身教练', session_count: 18, total_duration: 24000 },
+        ],
+        daily_trend: statsTrend,
+      });
+    }
+
+    // ---- 账户管理 ----
+    if (method === 'GET' && path === '/account/export') {
+      return respond({
+        user: USER,
+        identities,
+        devices,
+        sessions: timelineItems.map((t) => ({ ...t })),
+      });
+    }
+    if (method === 'DELETE' && path === '/account') {
+      return respond(null);
     }
 
     // ---- 设备管理 ----

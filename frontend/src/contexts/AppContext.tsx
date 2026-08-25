@@ -1,38 +1,78 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
 type Theme = 'light' | 'dark';
+type ThemePreference = Theme | 'system';
 
 interface AppContextValue {
   theme: Theme;
+  themePreference: ThemePreference;
+  setThemePreference: (pref: ThemePreference) => void;
   toggleTheme: () => void;
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
 }
 
+const THEME_KEY = 'pulse_theme';
+
 const AppContext = createContext<AppContextValue | undefined>(undefined);
 
+function systemTheme(): Theme {
+  if (typeof window !== 'undefined' && window.matchMedia) {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  return 'light';
+}
+
+function readPreference(): ThemePreference {
+  const stored = localStorage.getItem(THEME_KEY);
+  if (stored === 'light' || stored === 'dark' || stored === 'system') return stored;
+  return 'system';
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    return (localStorage.getItem('pulse_theme') as Theme) || 'light';
-  });
+  const [themePreference, setThemePreferenceState] = useState<ThemePreference>(readPreference);
+  const [systemThemeValue, setSystemThemeValue] = useState<Theme>(systemTheme);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+  // 订阅系统偏好变化；仅在「跟随系统」时影响最终主题。
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mql = window.matchMedia('(prefers-color-scheme: dark)');
+    const apply = () => setSystemThemeValue(mql.matches ? 'dark' : 'light');
+    apply();
+    const onChange = () => apply();
+    mql.addEventListener('change', onChange);
+    return () => mql.removeEventListener('change', onChange);
+  }, []);
+
+  const theme: Theme = themePreference === 'system' ? systemThemeValue : themePreference;
+
+  const setThemePreference = (pref: ThemePreference) => {
+    localStorage.setItem(THEME_KEY, pref);
+    setThemePreferenceState(pref);
+  };
+
   const toggleTheme = () => {
-    setTheme((prev) => {
-      const next = prev === 'light' ? 'dark' : 'light';
-      localStorage.setItem('pulse_theme', next);
-      return next;
-    });
+    setThemePreference(theme === 'light' ? 'dark' : 'light');
   };
 
   const toggleSidebar = () => {
     setSidebarCollapsed((prev) => !prev);
   };
 
-  const value: AppContextValue = { theme, toggleTheme, sidebarCollapsed, toggleSidebar };
+  // 主题以 data-theme 属性作用到根元素。
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
 
-  // 主题以 data-theme 属性作用到根元素
-  document.documentElement.setAttribute('data-theme', theme);
+  const value: AppContextValue = {
+    theme,
+    themePreference,
+    setThemePreference,
+    toggleTheme,
+    sidebarCollapsed,
+    toggleSidebar,
+  };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

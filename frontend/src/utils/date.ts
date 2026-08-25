@@ -27,3 +27,20 @@ export function shiftDate(date: string, days: number): string {
   d.setDate(d.getDate() + days);
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
+
+// 返回 date 所在周的周一（周一为一周起点）。
+export function mondayOf(date: string): string {
+  const d = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return date;
+  const day = d.getDay(); // 0=周日 … 6=周六
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// 将 YYYY-MM-DD 缩短为 MM-DD（图表横轴标签用）。
+export function formatMonthDay(date: string): string {
+  const d = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return date.slice(5) || date;
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}

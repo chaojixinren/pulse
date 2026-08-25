@@ -1235,6 +1235,118 @@ textarea {
   font-size: var(--font-size-sm);
 }
 
+/* ===== 报告增强：趋势图 ===== */
+.trend-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.trend-axis {
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.trend-bar {
+  fill: var(--color-primary);
+  opacity: 0.85;
+  transition: opacity 0.15s ease;
+}
+
+.trend-bar:hover {
+  opacity: 1;
+}
+
+.trend-value {
+  font-size: 10px;
+  fill: var(--color-text-secondary);
+}
+
+.trend-label {
+  font-size: 10px;
+  fill: var(--color-text-secondary);
+}
+
+/* ===== 报告增强：身份占比环图 ===== */
+.identity-pie {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-lg);
+  flex-wrap: wrap;
+}
+
+.identity-pie-svg {
+  width: 200px;
+  height: 200px;
+  flex-shrink: 0;
+}
+
+.identity-pie-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.identity-pie-legend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+}
+
+.identity-pie-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.identity-pie-name {
+  font-weight: var(--font-weight-medium);
+}
+
+.identity-pie-value {
+  color: var(--color-text-secondary);
+}
+
+/* ===== 错误边界 ===== */
+.error-state-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.error-state-message {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+/* ===== 账户设置 ===== */
+.account-section {
+  margin-bottom: var(--spacing-lg);
+}
+
+.account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.account-row-title {
+  font-weight: var(--font-weight-semibold);
+}
+
+.account-row-desc {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  margin-top: var(--spacing-xs);
+}
+
 /* ===== 响应式 ===== */
 @media (max-width: 768px) {
   .sidebar {

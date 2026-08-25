@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDate, formatDateTime, shiftDate, todayStr } from './date';
+import { formatDate, formatDateTime, formatMonthDay, mondayOf, shiftDate, todayStr } from './date';
 
 describe('formatDate', () => {
   it('将 ISO 时间转为本地时区的 YYYY-MM-DD', () => {
@@ -45,5 +45,27 @@ describe('shiftDate', () => {
 
   it('对非法输入原样返回', () => {
     expect(shiftDate('bad-date', 1)).toBe('bad-date');
+  });
+});
+
+describe('mondayOf', () => {
+  it('返回所在周的周一', () => {
+    expect(mondayOf('2024-06-05')).toBe('2024-06-03'); // 周三
+    expect(mondayOf('2024-06-03')).toBe('2024-06-03'); // 周一
+    expect(mondayOf('2024-06-09')).toBe('2024-06-03'); // 周日
+  });
+
+  it('对非法输入原样返回', () => {
+    expect(mondayOf('bad-date')).toBe('bad-date');
+  });
+});
+
+describe('formatMonthDay', () => {
+  it('将 YYYY-MM-DD 缩短为 MM-DD', () => {
+    expect(formatMonthDay('2024-06-05')).toBe('06-05');
+  });
+
+  it('对非法输入回退到字符串截断', () => {
+    expect(formatMonthDay('not-a-date')).toBe('-date');
   });
 });
