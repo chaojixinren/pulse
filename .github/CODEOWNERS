@@ -1,0 +1,26 @@
+# CODEOWNERS - 代码所有者配置
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# 全局默认所有者
+* @yourusername
+
+# 后端 Go 代码
+backend/ @yourusername
+
+# 前端代码
+frontend/ @yourusername
+
+# 硬件代码
+hardware/ @yourusername
+
+# CI/CD 配置
+.github/ @yourusername
+
+# 文档
+docs/ @yourusername
+*.md @yourusername
+
+# 构建配置
+Dockerfile @yourusername
+docker-compose.yml @yourusername
+Makefile @yourusername

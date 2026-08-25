@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# 后端代码检查
+echo "🔍 Running backend lint check..."
+make lint
+
+# 前端代码检查
+echo "🔍 Running frontend lint check..."
+cd frontend && npm run lint && npm run type-check && cd ..
+
+echo "✅ All checks passed!"

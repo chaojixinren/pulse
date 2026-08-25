@@ -1,0 +1,6 @@
+{
+  "hooks": {
+    "commit-msg": "commitlint --edit $1",
+    "pre-commit": "make lint"
+  }
+}
