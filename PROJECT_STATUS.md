@@ -1,248 +1,80 @@
-# Pulse 项目架构（更新版）
+# Pulse 项目状态
+
+> 本文件为项目整体状态看板，持续更新。**最后更新：2025-08（Phase 3 完成）**
 
 ## 🎯 项目概述
 
-Pulse 是一个智能身份空间系统，通过可穿戴硬件设备采集用户的日常对话，利用 AI 自动识别用户当前的身份角色，并生成个性化的报告。
+Pulse（时笺）是一个智能身份空间系统：通过可穿戴硬件采集日常对话，云端 AI（adk-go + StepFun ASR）自动转写、识别身份并提取待办/承诺，前端按身份生成日报、周报与统计报告。
 
-## 📚 技术栈（已确定）
+## 📊 总体进度
 
-### 后端
-- **语言**: Go 1.21+
-- **框架**: Gin
-- **AI SDK**: adk-go（Google Agent Development Kit）
-- **STT 服务**: StepFun StepAudio-2.5-ASR
-- **数据库**: MySQL 8.0+ (主数据)
-- **音频存储**: MySQL (audio_sessions.audio_data, LONGBLOB)
+| 模块 | 状态 | 说明 |
+|------|------|------|
+| 后端（Go） | ✅ 三阶段完成 | MVP 闭环 + AI 身份识别 + 生产化，测试/CI/CD/Docker 齐备 |
+| 前端（React） | ✅ 三阶段完成 | 身份/设备/时间线/报告/账户，单测/E2E/CI/CD/Docker 齐备 |
+| 部署 | ✅ 全栈 compose | MySQL + 迁移 + 后端 + 前端 一键启动 |
+| 硬件（ESP32-S3） | ⬜ 未开始 | 技术栈已定，固件/PCB/外壳仅有文档 |
 
-### 前端
-- **框架**: React 18+
-- **语言**: TypeScript
-- **构建工具**: Vite
-- **路由**: React Router
-- **HTTP 客户端**: Axios
-- **移动端**: 待定（未来可能使用 React Native）
+## ✅ 已完成
 
-### 硬件
-- **单片机**: ESP32-S3 系列芯片（Xtensa® 32 位 LX7 双核微处理器）
-- **无线连接**: 2.4 GHz Wi-Fi (IEEE 802.11b/g/n) 和 Bluetooth® 5 (LE)
-- **存储扩展**: 封装内可叠封 1.8 V / 3.3 V flash 和 PSRAM
-- **GPIO**: 45 个 GPIO 管脚（QFN56，7×7 mm）
-- **RTOS**: FreeRTOS / RT-Thread
-- **界面框架**: LVGL
-- **开发环境**: VSCode + PlatformIO
-- **编程语言**: C / Arduino
+### 后端（`backend/`，Go 1.26.5 + Gin）
+
+- **Phase 1 MVP**：项目骨架、JWT 认证（bcrypt + refresh token）、音频上传/存储、会话状态机、StepFun STT 转写、身份管理、时间线、日报。
+- **Phase 2 AI**：adk-go 身份识别、待办/承诺/笔记提取、设备管理（绑定码/绑定/解绑/指令）、AI 结果展示。
+- **Phase 3 生产化**：音频 AES-256-GCM 加密、账号导出/注销、周报/统计、可观测性（metrics/trace/日志）、限流与优雅关闭。
+- 测试：`go test ./...` 全绿（单元 + sqlmock 集成 + httptest API e2e）；真实 MySQL 的 live e2e 在 CI 中跑（`-tags e2e`）。
+- CI/CD：`.github/workflows/ci.yml`（lint/test/e2e/docker）+ `release.yml`（推送 GHCR）。
+
+### 前端（`frontend/`，React 18 + TypeScript + Vite）
+
+- **Phase 1 MVP**：认证、身份管理、时间线、日报。
+- **Phase 2 设备与 AI**：设备绑定/管理、AI 识别结果与「未识别」徽标。
+- **Phase 3 生产化**：周报/统计（自建 SVG 图表）、账户设置（导出/注销）、错误边界、路由懒加载 + 代码分割、深色模式持久化、access token 自动续期。
+- 测试：**209** 单元/集成（Vitest）+ **33** E2E（Playwright）全绿。
+- CI/CD：`.github/workflows/frontend-ci.yml`（lint/typecheck/单测/E2E/Docker 冒烟）。
+- 部署：多阶段 Dockerfile + Nginx（SPA 回退 + `/api` 反向代理）。
+
+### 部署（`docker-compose.yml`）
+
+```bash
+docker compose up -d --build
+```
+
+拉起 `mysql` → `migrate` → `backend` → `frontend` 四个服务；前端经 Nginx 把 `/api/**` 代理到后端，与浏览器同源，无需额外 CORS。访问 `http://localhost:${FRONTEND_PORT:-5173}`。
+
+## ⬜ 剩余待办
+
+1. **前后端真实联调**：前端 E2E 目前用内存 mock；尚无「浏览器 → 真实前端 → 真实后端 → MySQL」的端到端联调测试。
+2. **硬件固件**：ESP32-S3 音频采集/网络通信/云端上传均未实现（仅技术选型）。
+3. **运维项**（代码外）：Prometheus 告警规则、数据库备份与恢复演练、生产安全扫描。
+4. **移动端**：待定（未来可能 React Native）。
+
+## 🚀 快速开始
+
+```bash
+# 全栈（推荐）
+docker compose up -d --build
+
+# 或本地开发
+cd backend && cp .env.example .env && go run cmd/server/main.go
+cd frontend && npm ci && npm run dev
+```
 
 ## 📁 项目结构
 
 ```
 Pulse/
-├── backend/                    # Go 后端服务
-│   ├── cmd/
-│   │   └── server/
-│   │       └── main.go        # 应用入口
-│   ├── internal/
-│   │   ├── api/               # API 路由
-│   │   ├── service/           # 业务逻辑（AI 分析等）
-│   │   ├── model/             # 数据模型
-│   │   ├── middleware/        # 中间件
-│   │   └── config/            # 配置
-│   ├── pkg/
-│   │   └── utils/             # 工具函数
-│   ├── migrations/            # 数据库迁移
-│   ├── go.mod                 # Go 依赖
-│   ├── .env.example           # 环境变量模板
-│   └── README.md
-│
-├── frontend/                   # React 前端应用
-│   ├── src/
-│   │   ├── main.tsx           # 应用入口
-│   │   ├── App.tsx            # 根组件
-│   │   ├── components/        # 通用组件
-│   │   ├── pages/             # 页面组件
-│   │   │   ├── Auth/
-│   │   │   ├── Device/
-│   │   │   ├── Identity/
-│   │   │   ├── Timeline/
-│   │   │   └── Report/
-│   │   ├── services/          # API 服务
-│   │   ├── hooks/             # 自定义 Hooks
-│   │   ├── utils/             # 工具函数
-│   │   ├── types/             # TypeScript 类型
-│   │   └── styles/            # 样式文件
-│   ├── public/                # 静态资源
-│   ├── package.json           # 依赖
-│   └── README.md
-│
-├── hardware/                   # 硬件设备（ESP32-S3）
-│   ├── firmware/              # 固件代码
-│   ├── pcb/                   # PCB 设计
-│   ├── enclosure/             # 外壳设计
-│   └── docs/                  # 硬件文档
-│
-├── docs/                       # 项目文档
-│   ├── architecture.md        # 系统架构
-│   ├── api.md                 # API 文档
-│   ├── ai-prompts.md          # AI Prompt 设计
-│   ├── hardware-guide.md      # 硬件开发指南
-│   ├── deployment.md          # 部署指南
-│   └── PROJECT_OVERVIEW.md    # 项目总览
-│
-├── README.md                   # 项目主文档
-├── LICENSE                     # MIT 许可证
-├── CONTRIBUTING.md             # 贡献指南
-└── .gitignore                 # Git 忽略配置
+├── backend/        # Go 后端（api/service/repository/model/middleware/worker/migrations）
+├── frontend/       # React 前端（pages/components/services/contexts/e2e）
+├── hardware/       # ESP32-S3（文档）
+├── docs/           # 设计文档 + backend/ + frontend/ 分阶段文档
+└── docker-compose.yml
 ```
 
-## 🚀 快速开始
+## 📖 文档索引
 
-### 后端（Go）
-
-```bash
-cd backend
-
-# 下载依赖
-go mod download
-
-# 配置环境变量
-cp .env.example .env
-# 编辑 .env 文件
-
-# 运行服务
-go run cmd/server/main.go
-```
-
-### 前端（React）
-
-```bash
-cd frontend
-
-# 安装依赖
-npm install
-
-# 配置环境变量
-# 创建 .env 文件，设置 VITE_API_BASE_URL
-
-# 运行开发服务器
-npm run dev
-```
-
-### 硬件
-
-✅ 硬件技术栈已确定（ESP32-S3），参考 `hardware/README.md` 开始原型开发
-
-## 🔗 Git 仓库
-
-```bash
-# 初始化 Git（如果还没有）
-git init
-
-# 添加远程仓库
-git remote add origin https://github.com/chaojixinren/pulse.git
-
-# 提交代码
-git add .
-git commit -m "Initial commit: project architecture"
-git branch -M main
-git push -u origin main
-```
-
-## 📋 开发路线图
-
-### Phase 1: 后端 API 开发（3-4 周）
-- [ ] 搭建 Go 项目基础架构
-- [ ] 实现用户认证（JWT）
-- [ ] 实现数据库模型和迁移
-- [ ] 实现语音上传接口
-- [ ] 集成 LLM（adk-go）进行 AI 分析
-- [ ] 实现身份管理 CRUD
-- [ ] 实现时间线和报告 API
-
-### Phase 2: 前端 Web 应用（3-4 周）
-- [ ] 搭建 React + TypeScript 项目
-- [ ] 实现认证页面（登录/注册）
-- [ ] 实现身份管理界面
-- [ ] 实现时间线查看
-- [ ] 实现报告中心
-- [ ] 实现设备管理（预留）
-
-### Phase 3: 硬件开发（ESP32-S3）
-- [x] 确定硬件技术栈（ESP32-S3）
-- [ ] 采购开发板和组件
-- [ ] 实现音频采集
-- [ ] 实现网络通信
-- [ ] 实现云端上传
-
-### Phase 4: 集成与测试（2-3 周）
-- [ ] 前后端集成测试
-- [ ] 硬件与云端集成
-- [ ] 用户验收测试
-- [ ] 性能优化
-- [ ] 部署上线
-
-## 📝 待决策事项
-
-1. **前端状态管理方案**
-   - Redux Toolkit?
-   - Zustand?
-   - Jotai?
-   - React Context?
-
-2. **前端 UI 组件库**
-   - Material-UI?
-   - Ant Design?
-   - Chakra UI?
-   - Tailwind CSS + Headless UI?
-
-3. ~~**硬件技术栈**~~ ✅ 已确定：ESP32-S3 系列
-
-4. **部署方案**
-   - Docker + Kubernetes?
-   - 云服务提供商?
-   - 单服务器部署?
-
-## 🎯 下一步行动
-
-### 立即可做
-1. ✅ 项目架构已设计完成
-2. ✅ 技术栈已明确（后端 Go + 前端 React）
-3. ⬜ 推送代码到 GitHub
-4. ⬜ 创建项目看板（GitHub Projects）
-
-### 本周可做
-1. ⬜ 开始后端 Go 项目开发
-   - 实现基础的 Gin 服务器
-   - 连接 MySQL 数据库
-   - 实现用户认证
-
-2. ⬜ 开始前端 React 项目开发
-   - 搭建项目框架
-   - 实现路由结构
-   - 创建基础页面布局
-
-### 后续待办
-1. ⬜ 集成 LLM（adk-go）AI SDK
-2. ⬜ 实现完整的 API 接口
-3. ✅ 决定硬件技术栈（ESP32-S3）
-4. ⬜ 制定详细的开发计划
-
-## 📖 重要文档
-
-- **系统架构**: [docs/architecture.md](docs/architecture.md)
-- **API 文档**: [docs/api.md](docs/api.md)
-- **AI Prompt 设计**: [docs/ai-prompts.md](docs/ai-prompts.md)
-- **项目总览**: [docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md)
-- **部署指南**: [docs/deployment.md](docs/deployment.md)
-
-## ⚠️ 重要提醒
-
-1. **技术栈由项目负责人决定** - 不要自行更改已确定的技术选型
-2. **硬件技术栈已确定** - 采用 ESP32-S3 系列芯片
-3. ✅ 文档已同步最新技术栈（Go / React / ESP32-S3）
-
----
-
-**项目状态**: 架构设计完成，技术栈已确定（后端 Go，前端 React）  
-**当前进度**: 15%（架构设计 + 技术栈确定）  
-**下一里程碑**: 后端 API 基础框架搭建
-
-**最后更新**: 2024-08-23
+- 后端设计：[docs/backend-design.md](docs/backend-design.md)；分阶段：[docs/backend/](docs/backend/)
+- 前端设计：[docs/frontend-design.md](docs/frontend-design.md)；分阶段：[docs/frontend/](docs/frontend/)
+- 后端 CI/CD：[docs/backend/ci-cd.md](docs/backend/ci-cd.md)
+- 前端 CI/CD：[docs/frontend/ci-cd.md](docs/frontend/ci-cd.md)
+- 硬件：[hardware/README.md](hardware/README.md)

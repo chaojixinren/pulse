@@ -128,9 +128,15 @@ server {
 ### 构建与运行
 
 ```bash
+# 仅构建/运行前端镜像
 docker build --build-arg VITE_API_BASE_URL=/api/v1 -t pulse-frontend:local frontend
 docker run -p 5173:80 pulse-frontend:local
+
+# 全栈一键启动（MySQL + 迁移 + 后端 + 前端）
+docker compose up -d --build
 ```
+
+全栈启动后访问 `http://localhost:${FRONTEND_PORT:-5173}`；前端 Nginx 将 `/api/**` 反向代理到 `backend:8080`，与后端同源，无需额外 CORS 配置。
 
 ## 可覆盖的环境变量
 

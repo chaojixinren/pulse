@@ -17,7 +17,7 @@
 - **代码规范**：ESLint + TypeScript ESLint
 - **测试**：Vitest（单测）+ React Testing Library（组件）+ Playwright（E2E，可选）
 
-> 说明：`PROJECT_STATUS.md` 中「前端状态管理方案」「前端 UI 组件库」两项待决策事项，已在 `docs/frontend-design.md` 中定案（Context + Hooks、自建组件库），本目录沿用该决策。
+> 说明：前端状态管理与 UI 方案已在 `docs/frontend-design.md` 中定案（Context + Hooks、自建组件库），本目录沿用该决策。
 
 ## 阶段总览
 

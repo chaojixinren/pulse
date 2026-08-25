@@ -32,11 +32,19 @@ Pulse/
 
 ### 前置要求
 
-- **后端**：Go 1.21+
-- **前端**：Node.js 18+
+- **后端**：Go 1.26.x
+- **前端**：Node.js 20+
 - **硬件**：ESP32-S3
 
 ### 安装步骤
+
+#### 0. Docker 全栈（推荐）
+
+```bash
+docker compose up -d --build
+# 前端：http://localhost:5173 （FRONTEND_PORT 可改）
+# 后端健康检查：curl http://localhost:8080/health
+```
 
 #### 1. 后端服务
 
@@ -65,11 +73,10 @@ npm run dev
 
 ## 文档
 
-- [系统架构设计](docs/architecture.md)
-- [API 文档](docs/api.md)
-- [硬件开发指南](docs/hardware-guide.md)
-- [AI Prompt 设计](docs/ai-prompts.md)
-- [部署指南](docs/deployment.md)
+- [后端设计](docs/backend-design.md) · [后端分阶段文档](docs/backend/)
+- [前端设计](docs/frontend-design.md) · [前端分阶段文档](docs/frontend/)
+- [后端 CI/CD](docs/backend/ci-cd.md) · [前端 CI/CD](docs/frontend/ci-cd.md)
+- [项目状态](PROJECT_STATUS.md) · [硬件开发指南](hardware/README.md)
 
 ## 技术栈
 
@@ -82,7 +89,10 @@ npm run dev
 - **音频存储**：MySQL（audio_sessions.audio_data，LONGBLOB）
 
 ### 前端
-- **框架**：React
+- **框架**：React 18 + TypeScript
+- **构建工具**：Vite
+- **路由**：React Router
+- **HTTP 客户端**：Axios
 - **移动端**：待定（未来可能使用 React Native）
 
 ### 硬件
@@ -96,10 +106,10 @@ npm run dev
 ## 开发路线图
 
 - [x] 项目架构设计
+- [x] 云端 API 服务（后端 Phase 1–3）
+- [x] AI 分析引擎（身份识别 + 信息提取）
+- [x] 用户端 Web App（身份/设备/时间线/报告/账户）
 - [ ] 硬件原型开发（MVP）
-- [ ] 云端 API 服务
-- [ ] AI 分析引擎
-- [ ] 用户端 App（基础功能）
 - [ ] 内测版本
 - [ ] 正式发布
 
@@ -121,8 +131,8 @@ npm run dev
 
 ## 联系方式
 
-- 项目主页：[GitHub](https://github.com/yourusername/pulse)
-- 问题反馈：[Issues](https://github.com/yourusername/pulse/issues)
+- 项目主页：[GitHub](https://github.com/chaojixinren/pulse)
+- 问题反馈：[Issues](https://github.com/chaojixinren/pulse/issues)
 
 ## 致谢
 

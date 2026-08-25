@@ -48,9 +48,9 @@ type Config struct {
 - `GET /health` → `{"code":0,"message":"ok"}`，同时 ping MySQL，失败返回 503。
 
 ### 验收标准
-- [ ] `go run cmd/server/main.go` 可启动，`/health` 返回 200。
-- [ ] .env 缺失时启动报错并给出明确提示。
-- [ ] 请求日志（method、path、status、耗时）通过 zap 输出。
+- [x] `go run cmd/server/main.go` 可启动，`/health` 返回 200。
+- [x] .env 缺失时启动报错并给出明确提示。
+- [x] 请求日志（method、path、status、耗时）通过 zap 输出。
 
 ---
 
@@ -124,9 +124,9 @@ type TokenPair struct {
 - JWT 中间件解析后把 `user_id` 写入 context，供后续 handler 读取。
 
 ### 验收标准
-- [ ] 注册后密码在库里为 bcrypt 哈希，不存明文。
-- [ ] 未带 token 访问受保护接口返回 401。
-- [ ] refresh token 可续期，logout 后 refresh token 失效。
+- [x] 注册后密码在库里为 bcrypt 哈希，不存明文。
+- [x] 未带 token 访问受保护接口返回 401。
+- [x] refresh token 可续期，logout 后 refresh token 失效。
 
 ---
 
@@ -161,9 +161,9 @@ internal/model/audio_session.go
 | POST | /api/v1/audio/upload | multipart 上传音频（需认证） |
 
 ### 验收标准
-- [ ] 上传成功返回 session_id，audio_sessions.audio_data 中能查到对应音频二进制。
-- [ ] 非法格式 / 超大文件返回 400，不落库。
-- [ ] 落库失败返回 5xx，且不产生孤儿记录。
+- [x] 上传成功返回 session_id，audio_sessions.audio_data 中能查到对应音频二进制。
+- [x] 非法格式 / 超大文件返回 400，不落库。
+- [x] 落库失败返回 5xx，且不产生孤儿记录。
 
 ---
 
@@ -213,9 +213,9 @@ func (r *AudioSessionRepo) ListByUser(ctx, userID string, filter Filter, page, s
 ```
 
 ### 验收标准
-- [ ] 状态流转合法（不允许 completed → failed 等非法跳转）。
-- [ ] 失败记录 error_message，可重试。
-- [ ] 所有状态变更更新 updated_at。
+- [x] 状态流转合法（不允许 completed → failed 等非法跳转）。
+- [x] 失败记录 error_message，可重试。
+- [x] 所有状态变更更新 updated_at。
 
 ---
 
@@ -251,8 +251,8 @@ func (s *SttService) Transcribe(ctx, data []byte, filename string) (text string,
 - STT 调用要设超时，失败要可重试（指数退避）。
 
 ### 验收标准
-- [ ] 上传一段音频，若干秒后会话状态变为 completed，transcript 有内容。
-- [ ] StepFun 调用失败时状态为 failed，可手动触发重试。
+- [x] 上传一段音频，若干秒后会话状态变为 completed，transcript 有内容。
+- [x] StepFun 调用失败时状态为 failed，可手动触发重试。
 
 ---
 
@@ -288,8 +288,8 @@ CREATE INDEX idx_identities_user_id ON identities(user_id);
 | PUT    | /api/v1/identities/:id/default | 设为默认 |
 
 ### 验收标准
-- [ ] 每个用户最多一个默认身份（服务层事务保证，见 `identity.SetDefault`）。
-- [ ] 删除默认身份后需指定新默认，或禁止删除唯一默认身份。
+- [x] 每个用户最多一个默认身份（服务层事务保证，见 `identity.SetDefault`）。
+- [x] 删除默认身份后需指定新默认，或禁止删除唯一默认身份。
 
 ---
 
@@ -316,9 +316,9 @@ type TimelineItem struct {
 ```
 
 ### 验收标准
-- [ ] 列表按 recorded_at 倒序，分页正确。
-- [ ] 按身份/日期/状态过滤生效。
-- [ ] 只返回当前用户自己的数据（越权访问他人返回空/403）。
+- [x] 列表按 recorded_at 倒序，分页正确。
+- [x] 按身份/日期/状态过滤生效。
+- [x] 只返回当前用户自己的数据（越权访问他人返回空/403）。
 
 ---
 
@@ -345,8 +345,8 @@ type DailyReport struct {
 ```
 
 ### 验收标准
-- [ ] 指定日期无数据时返回空报告而非报错。
-- [ ] 会话数、总时长、身份分布统计正确。
+- [x] 指定日期无数据时返回空报告而非报错。
+- [x] 会话数、总时长、身份分布统计正确。
 
 ---
 

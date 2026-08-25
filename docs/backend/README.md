@@ -40,8 +40,10 @@ backend/
 │   │   ├── timeline.go
 │   │   ├── device.go            # Phase 2：设备管理
 │   │   ├── report.go
+│   │   ├── account.go           # Phase 3：数据删除/导出
 │   │   ├── e2e_test.go          # 接口 e2e（sqlmock）
-│   │   └── e2e_phase2_test.go   # Phase 2 接口 e2e
+│   │   ├── e2e_phase2_test.go   # Phase 2 接口 e2e
+│   │   └── e2e_phase3_test.go   # Phase 3 接口 e2e
 │   ├── service/                 # 业务逻辑层
 │   │   ├── auth.go
 │   │   ├── audio.go
@@ -50,6 +52,7 @@ backend/
 │   │   ├── identity.go
 │   │   ├── timeline.go
 │   │   ├── report.go
+│   │   ├── account.go           # Phase 3：导出/注销
 │   │   └── device.go            # Phase 2：设备管理
 │   ├── repository/              # 数据访问层（与 service 分离）
 │   │   ├── user.go
@@ -82,7 +85,8 @@ backend/
 │   └── utils/                   # uuid / hash / random / jwt 等工具
 ├── test/                        # 真实基础设施 e2e（-tags e2e）
 │   ├── e2e_live_test.go         # Phase 1 全链路
-│   └── e2e_live_phase2_test.go  # Phase 2 设备管理
+│   ├── e2e_live_phase2_test.go  # Phase 2 设备管理
+│   └── e2e_live_phase3_test.go  # Phase 3 报告/账户
 ├── migrations/                  # SQL 迁移文件
 │   ├── 001_init.sql
 │   └── 002_phase2.sql

@@ -57,5 +57,18 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: "/api/v1"
+    image: pulse-frontend:local
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
 volumes:
   mysql_data:

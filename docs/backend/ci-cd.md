@@ -46,8 +46,9 @@ docker compose up -d --build
 1. `mysql`（mysql:8.0，库名 `pulse`）
 2. `migrate`（一次性执行 `pulse-migrate` 迁移，等待 MySQL 就绪）
 3. `backend`（等待迁移完成后启动，暴露 `8080`）
+4. `frontend`（等待 backend 健康后启动，Nginx 托管静态产物，暴露 `FRONTEND_PORT`，默认 `5173`）
 
-启动后健康检查：`curl -fsS http://localhost:8080/health`，返回 200 表示 MySQL 可用。
+启动后健康检查：`curl -fsS http://localhost:8080/health`，返回 200 表示 MySQL 可用。前端通过 `http://localhost:${FRONTEND_PORT:-5173}` 访问，`/api/**` 由前端 Nginx 反向代理到 `backend:8080`，因此浏览器请求与后端同源，无需额外 CORS 配置。
 
 ## 可覆盖的环境变量（docker compose）
 
@@ -62,6 +63,7 @@ compose 会读取同目录的 `.env`（不存在则使用默认值）：
 | `JWT_SECRET` | `dev-secret-change-me` | JWT 密钥（生产务必覆盖） |
 | `STEPFUN_API_KEY` | 空 | StepFun 语音识别密钥 |
 | `GIN_MODE` | `release` | Gin 运行模式 |
+| `FRONTEND_PORT` | `5173` | 前端 Nginx 映射到宿主机端口 |
 
 > 生产环境请务必覆盖 `JWT_SECRET`、`MYSQL_*` 密码与 `STEPFUN_API_KEY`，密钥建议走 secret 管理。
 
