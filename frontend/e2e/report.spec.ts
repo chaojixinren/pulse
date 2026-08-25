@@ -37,3 +37,12 @@ test('切换日期加载对应日报', async ({ page }) => {
   await page.getByRole('button', { name: '后一天 →' }).click();
   await expect(dateInput).toHaveValue(before);
 });
+
+test('日报待办可勾选标记完成', async ({ page }) => {
+  await goToReport(page);
+  const checkbox = page.getByRole('checkbox', { name: '整理产品需求文档' });
+  await expect(checkbox).toBeVisible();
+  await checkbox.check();
+  await expect(checkbox).toBeChecked();
+  await expect(page.locator('.extracted-text-done')).toHaveText('整理产品需求文档');
+});

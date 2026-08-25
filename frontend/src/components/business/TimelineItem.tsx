@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/common/Button';
+import { IdentityBadge } from '@/components/business/IdentityBadge';
+import type { Identity } from '@/types/identity.types';
 import type { TimelineItem as TimelineItemData, TimelineStatus } from '@/types/timeline.types';
 import { formatDateTime } from '@/utils/date';
 import { formatDurationShort } from '@/utils/format';
@@ -15,26 +17,17 @@ const COLLAPSE_THRESHOLD = 200;
 
 export interface TimelineItemProps {
   item: TimelineItemData;
-  identityName?: string;
-  identityColor?: string;
+  identity?: Identity;
 }
 
-export function TimelineItem({ item, identityName, identityColor }: TimelineItemProps) {
+export function TimelineItem({ item, identity }: TimelineItemProps) {
   const [expanded, setExpanded] = useState(false);
   const shouldCollapse = item.transcript.length > COLLAPSE_THRESHOLD;
 
   return (
     <div className="timeline-item">
       <div className="timeline-item-head">
-        {item.identity_id && (
-          <span className="identity-badge">
-            <span
-              className="identity-badge-dot"
-              style={{ backgroundColor: identityColor || '#9ca3af' }}
-            />
-            {identityName || '未知身份'}
-          </span>
-        )}
+        <IdentityBadge identity={identity} />
         <span className={'badge badge-status-' + item.status}>
           {STATUS_LABELS[item.status] || item.status}
         </span>

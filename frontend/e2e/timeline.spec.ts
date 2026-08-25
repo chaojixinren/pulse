@@ -14,6 +14,16 @@ test('时间线列表展示转写文本与状态', async ({ page }) => {
   await expect(page.getByText(/共 25 条/)).toBeVisible();
 });
 
+test('AI 身份识别：未识别会话显示「未识别」徽标', async ({ page }) => {
+  await goToTimeline(page);
+  // mock 中第 3 条会话无 identity_id（低置信度），应显示「未识别」灰标
+  await expect(page.locator('.identity-badge-unrecognized').first()).toBeVisible();
+  // 已识别的会话显示身份名称徽标
+  await expect(
+    page.locator('.identity-badge-name', { hasText: '产品经理' }).first(),
+  ).toBeVisible();
+});
+
 test('按状态过滤生效', async ({ page }) => {
   await goToTimeline(page);
   await page.getByLabel('状态').selectOption('completed');

@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/common/Button';
 import { Empty } from '@/components/common/Empty';
 import { Loading } from '@/components/common/Loading';
 import { TimelineItem } from '@/components/business/TimelineItem';
+import { useIdentityMap } from '@/hooks/useIdentityMap';
 import { identityService } from '@/services/identity.service';
 import { timelineService } from '@/services/timeline.service';
 import type { Identity } from '@/types/identity.types';
@@ -75,13 +76,7 @@ export function Component() {
     load();
   }, [load]);
 
-  const identityMap = useMemo(() => {
-    const map: Record<string, Identity> = {};
-    for (const identity of identities) {
-      map[identity.id] = identity;
-    }
-    return map;
-  }, [identities]);
+  const identityMap = useIdentityMap(identities);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -181,15 +176,8 @@ export function Component() {
         <>
           <div className="timeline-list">
             {items.map((item) => {
-              const identity = item.identity_id ? identityMap[item.identity_id] : undefined;
-              return (
-                <TimelineItem
-                  key={item.session_id}
-                  item={item}
-                  identityName={identity?.name}
-                  identityColor={identity?.color}
-                />
-              );
+              const identity = item.identity_id ? identityMap.get(item.identity_id) : undefined;
+              return <TimelineItem key={item.session_id} item={item} identity={identity} />;
             })}
           </div>
           <div className="pagination">

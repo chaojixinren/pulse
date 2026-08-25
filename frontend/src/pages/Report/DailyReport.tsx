@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/common/Button';
 import { Empty } from '@/components/common/Empty';
 import { Loading } from '@/components/common/Loading';
+import { ExtractedList } from '@/components/business/ExtractedList';
 import { reportService } from '@/services/report.service';
 import type { DailyReport } from '@/types/report.types';
 import { shiftDate, todayStr } from '@/utils/date';
@@ -118,30 +119,19 @@ export function Component() {
           <div className="report-section">
             <h2 className="section-title">待办</h2>
             <div className="card">
-              {report.todos.length === 0 ? (
-                <Empty icon="✅" title="暂无待办" />
-              ) : (
-                <ul className="list-plain">
-                  {report.todos.map((todo, idx) => (
-                    <li key={idx}>{todo}</li>
-                  ))}
-                </ul>
-              )}
+              <ExtractedList
+                items={report.todos}
+                emptyIcon="✅"
+                emptyTitle="暂无待办"
+                checkable
+              />
             </div>
           </div>
 
           <div className="report-section">
             <h2 className="section-title">笔记</h2>
             <div className="card">
-              {report.notes.length === 0 ? (
-                <Empty icon="📝" title="暂无笔记" />
-              ) : (
-                <ul className="list-plain">
-                  {report.notes.map((note, idx) => (
-                    <li key={idx}>{note}</li>
-                  ))}
-                </ul>
-              )}
+              <ExtractedList items={report.notes} emptyIcon="📝" emptyTitle="暂无笔记" />
             </div>
           </div>
         </>

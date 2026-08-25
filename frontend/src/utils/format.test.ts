@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDuration, formatDurationShort } from './format';
+import { formatCountdown, formatDuration, formatDurationShort } from './format';
 
 describe('formatDuration', () => {
   it('纯秒数', () => {
@@ -35,5 +35,17 @@ describe('formatDurationShort', () => {
 
   it('负数被截断为 0', () => {
     expect(formatDurationShort(-1)).toBe('0s');
+  });
+});
+
+describe('formatCountdown', () => {
+  it('格式化为 MM:SS', () => {
+    expect(formatCountdown(0)).toBe('00:00');
+    expect(formatCountdown(65)).toBe('01:05');
+    expect(formatCountdown(600)).toBe('10:00');
+  });
+
+  it('负数被截断为 0', () => {
+    expect(formatCountdown(-5)).toBe('00:00');
   });
 });

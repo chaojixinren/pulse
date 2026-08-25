@@ -3,6 +3,7 @@ import { useApp } from '@/contexts/AppContext';
 
 const navItems = [
   { to: '/identity', label: '身份管理', icon: '👤' },
+  { to: '/devices', label: '设备管理', icon: '📡' },
   { to: '/timeline', label: '时间线', icon: '🕒' },
   { to: '/reports/daily', label: '日报', icon: '📊' },
 ];
