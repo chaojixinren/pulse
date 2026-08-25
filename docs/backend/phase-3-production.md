@@ -1,6 +1,6 @@
 # Phase 3：生产化开发文档
 
-> **目标**：让系统达到可上线标准——补全报告、加密存储、合规能力、限流、可观测性与部署。
+> **目标**：让系统达到可上线标准——补全报告、加密存储、合规能力、可观测性与部署。
 > **完成标志**：通过安全检查，可灰度上线。
 
 ## 模块概览
@@ -12,9 +12,8 @@
 | 1 报告增强 | Phase1 时间线 + Phase2 AI | 周报、统计图表 |
 | 2 加密存储 | Phase1 音频上传 | 音频 AES-256 加密 |
 | 3 数据删除/导出 | 各模块 | 合规（GDPR/个保法） |
-| 4 限流配额 | 认证 | 防刷、配额 |
-| 5 可观测性 | 骨架 | 日志、trace、指标 |
-| 6 部署 | 全部 | docker-compose、CI/CD |
+| 4 可观测性 | 骨架 | 日志、trace、指标 |
+| 5 部署 | 全部 | docker-compose、CI/CD |
 
 ---
 
@@ -45,12 +44,11 @@ type WeeklyReport struct {
 
 ### 性能策略
 - 图表数据按天聚合（`DATE_FORMAT` 分组），避免实时扫全表。
-- 统计汇总（stats）结果写入 Redis 缓存（TTL 5 分钟），请求先查缓存；Redis 不可用时降级直查数据库。
 - 数据量进一步增大时可再引入定时任务预计算日报/周报。
 
 ### 验收标准
 - [x] 周报统计正确，含趋势与身份分布。
-- [x] 大时间范围查询有缓存（stats 走 Redis 5 分钟缓存，按天聚合）。
+- [x] 大时间范围查询按天聚合（`DATE_FORMAT` 分组），避免实时扫全表。
 
 ---
 
@@ -108,23 +106,7 @@ func DecryptAudio(data []byte, key []byte) ([]byte, error)
 
 ---
 
-## 模块 4：限流配额
-
-### 职责
-登录/上传防刷与配额。
-
-### 实现
-- Redis 固定窗口（INCR + EXPIRE）限流，Redis 不可用时降级放行（fail-open）。
-- 登录/注册/刷新按 IP 限流（`RATE_LIMIT_AUTH_PER_MIN`，默认 20 次/分）。
-- 音频上传按用户限流（`RATE_LIMIT_UPLOAD_PER_MIN`，默认 30 次/分，认证后）。
-
-### 验收标准
-- [x] 登录/注册有限流（按 IP）。
-- [x] 上传有限流（按用户，认证后）。
-
----
-
-## 模块 5：可观测性
+## 模块 4：可观测性
 
 ### 职责
 结构化日志、链路追踪、指标监控，便于线上排查与告警。
@@ -150,7 +132,7 @@ internal/middleware/metrics.go # Prometheus 指标
 
 ---
 
-## 模块 6：部署
+## 模块 5：部署
 
 ### 职责
 用 docker-compose 一键启动依赖与服务，配置 CI/CD。
@@ -162,7 +144,6 @@ internal/middleware/metrics.go # Prometheus 指标
 ```yaml
 services:
   mysql:     # mysql:8.0，健康检查 mysqladmin ping
-  redis:     # redis:7-alpine，健康检查 redis-cli ping
   migrate:   # 一次性执行 pulse-migrate（等待 MySQL 就绪）
   backend:   # 多阶段构建 Go 镜像，暴露 8080，healthcheck 调 /health
 ```
@@ -171,7 +152,7 @@ services:
 - 多阶段 Docker 构建（golang 编译 → 精简运行镜像，见 `backend/Dockerfile`）。
 - 环境变量区分 dev/prod（`.env` 注入，密钥走 secret 管理）。
 - 健康检查：容器 healthcheck 调 `/health`（200 健康 / 503 依赖不可用）。
-- CI：`gofmt` + `go vet` → 单测（`-race`）→ 真实 MySQL/Redis e2e → 构建镜像（见 `.github/workflows/ci.yml`）。
+- CI：`gofmt` + `go vet` → 单测（`-race`）→ 真实 MySQL e2e → 构建镜像（见 `.github/workflows/ci.yml`）。
 - CD：推送 `v*` tag 构建镜像到 GHCR 并创建 Release（见 `.github/workflows/release.yml`）。
 
 ### 验收标准
@@ -183,10 +164,9 @@ services:
 
 ## Phase 3 整体验收清单
 
-- [x] 周报/统计报告可用，大数据量查询有缓存。
+- [x] 周报/统计报告可用，大数据量查询按天聚合。
 - [x] 音频加密存储，密钥安全。
 - [x] 支持数据删除与导出，注销流程完整。
-- [x] 登录/上传有限流与配额。
 - [x] 日志可链路追踪，指标可采集（告警规则随 Prometheus 部署配置）。
 - [x] docker-compose 部署 + CI/CD 跑通。
 

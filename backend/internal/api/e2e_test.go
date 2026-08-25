@@ -39,7 +39,7 @@ var (
 
 const e2eSecret = "e2e-secret"
 
-// newE2ERouter 构建完整路由（含所有中间件/服务/仓库），DB 由 sqlmock 驱动，Redis 传 nil。
+// newE2ERouter 构建完整路由（含所有中间件/服务/仓库），DB 由 sqlmock 驱动。
 func newE2ERouter(t *testing.T) (*gin.Engine, sqlmock.Sqlmock, *config.Config) {
 	t.Helper()
 	db, mock, err := sqlmock.New()
@@ -47,7 +47,7 @@ func newE2ERouter(t *testing.T) (*gin.Engine, sqlmock.Sqlmock, *config.Config) {
 	t.Cleanup(func() { _ = db.Close() })
 
 	cfg := &config.Config{JWTSecret: e2eSecret, GINMode: gin.TestMode, MaxAudioSize: 1024 * 1024, JWTExpiresIn: time.Hour, RefreshTokenTTL: 7 * 24 * time.Hour}
-	router, _ := api.NewRouter(cfg, db, nil)
+	router, _ := api.NewRouter(cfg, db)
 	return router, mock, cfg
 }
 

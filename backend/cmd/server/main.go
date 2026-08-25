@@ -32,13 +32,7 @@ func main() {
 	}
 	defer db.Close()
 
-	rdb, err := config.InitRedis(cfg.RedisURL)
-	if err != nil {
-		logger.Log.Fatal("连接 Redis 失败", zap.Error(err))
-	}
-	defer rdb.Close()
-
-	router, processor := api.NewRouter(cfg, db, rdb)
+	router, processor := api.NewRouter(cfg, db)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

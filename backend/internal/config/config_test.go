@@ -34,7 +34,6 @@ func TestLoadDefaults(t *testing.T) {
 
 	assert.Equal(t, "8080", cfg.Port)
 	assert.Equal(t, "debug", cfg.GINMode)
-	assert.Equal(t, "redis://localhost:6379", cfg.RedisURL)
 	assert.Equal(t, "test-secret", cfg.JWTSecret)
 	assert.Equal(t, time.Hour, cfg.JWTExpiresIn, "access token 默认 1h")
 	assert.Equal(t, 168*time.Hour, cfg.RefreshTokenTTL, "refresh token 默认 7 天")

@@ -9,7 +9,6 @@
 - **AI SDK**：adk-go（Google Agent Development Kit）
 - **STT**：StepFun StepAudio-2.5-ASR
 - **数据库**：MySQL 8.0+（主数据）
-- **缓存**：Redis 7+（会话、热点数据）
 - **音频存储**：MySQL（音频二进制存于 audio_sessions 表）
 - **认证**：JWT
 
@@ -19,7 +18,7 @@
 |------|------|----------|----------|
 | [Phase 1：MVP](phase-1-mvp.md) | 跑通「上传音频 → 转写 → 查看」最小闭环 | 骨架、认证、音频上传、MySQL 存储、语音会话、STT 转写、身份、时间线、日报 | 硬件上传的音频能被转写并在前端时间线查看 |
 | [Phase 2：AI 增强](phase-2-ai.md) | 从转写文本提取结构化信息 | AI 分析（身份识别/信息提取）、设备管理 | 系统能自动识别身份、提取待办/承诺 |
-| [Phase 3：生产化](phase-3-production.md) | 达到可上线标准 | 报告增强、加密存储、数据删除/导出、限流配额、可观测性、部署 | 通过安全检查，可灰度上线 |
+| [Phase 3：生产化](phase-3-production.md) | 达到可上线标准 | 报告增强、加密存储、数据删除/导出、可观测性、部署 | 通过安全检查，可灰度上线 |
 
 ## 后端目录结构（当前实现）
 
@@ -74,8 +73,7 @@ backend/
 │   │   └── audio_processor.go   # 转写 → AI 分析流水线
 │   └── config/
 │       ├── config.go            # 配置加载
-│       ├── database.go          # MySQL 连接
-│       └── redis.go             # Redis 连接
+│       └── database.go          # MySQL 连接
 ├── pkg/
 │   ├── errors/                  # 自定义错误类型
 │   ├── logger/                  # zap 封装
@@ -95,7 +93,7 @@ backend/
 ```
 
 > 说明：Phase 1 与 Phase 2 已按上表落地；各目录内 `_test.go` 为对应单元/集成测试（与源文件同目录）。
-> Phase 3（生产化）已落地：报告增强（周报/统计 + Redis 缓存）、音频 AES-256-GCM 加密、数据删除/导出、Redis 限流、request_id 链路 + Prometheus 指标。详见 [Phase 3：生产化](phase-3-production.md)。
+> Phase 3（生产化）已落地：报告增强（周报/统计）、音频 AES-256-GCM 加密、数据删除/导出、request_id 链路 + Prometheus 指标。详见 [Phase 3：生产化](phase-3-production.md)。
 
 ## 分层约定
 
@@ -158,7 +156,6 @@ type Response struct {
 | 报告增强 | 3 | service/report | 时间线、AI |
 | 加密存储 | 3 | service/audio | 存储 |
 | 数据删除/导出 | 3 | api/export、service/export | 各模块 |
-| 限流配额 | 3 | middleware/ratelimit | 认证 |
 | 可观测性 | 3 | pkg/logger、middleware | 骨架 |
 | 部署 | 3 | docker-compose、CI | 全部 |
 
@@ -167,9 +164,9 @@ type Response struct {
 | 类型 | 命令 | 依赖 |
 |------|------|------|
 | 单元 + 集成 | `go test ./... -race` | 无（sqlmock） |
-| 真实 e2e | `go test -tags e2e ./test/` | MySQL + Redis（设置 `TEST_DATABASE_DSN` / `TEST_REDIS_URL`） |
+| 真实 e2e | `go test -tags e2e ./test/` | MySQL（设置 `TEST_DATABASE_DSN`） |
 
-CI 在 push / PR 时执行 `lint` → `test` → `e2e`（Phase 1 / Phase 2 矩阵）→ `docker`，详见 [后端 CI/CD](ci-cd.md)。
+CI 在 push / PR 时执行 `lint` → `test` → `e2e`（Phase 1 / 2 / 3 矩阵）→ `docker`，详见 [后端 CI/CD](ci-cd.md)。
 
 ## 开发顺序建议
 
@@ -178,7 +175,7 @@ CI 在 push / PR 时执行 `lint` → `test` → `e2e`（Phase 1 / Phase 2 矩�
 1. Phase 1 先搭骨架 + 认证，因为所有后续接口都依赖 JWT 中间件。
 2. Phase 1 的音频上传 → 存储 → 会话 → STT → 时间线 是一条强依赖链，按此顺序开发。
 3. Phase 2 的 AI 分析依赖 Phase 1 的 STT 与身份；设备管理较独立，可与 AI 分析并行。
-4. Phase 3 可并行推进：加密存储、限流、可观测性相互独立。
+4. Phase 3 可并行推进：加密存储、可观测性相互独立。
 
 ## 相关文档
 

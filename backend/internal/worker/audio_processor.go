@@ -3,10 +3,8 @@ package worker
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"go.uber.org/zap"
 
 	"github.com/chaojixinren/pulse/internal/model"
@@ -19,7 +17,6 @@ import (
 type AudioProcessor struct {
 	sessions      *repository.AudioSessionRepo
 	stt           *service.SttService
-	redis         *redis.Client
 	identities    *repository.IdentityRepo
 	ai            *service.AIService
 	encryptionKey []byte
@@ -27,11 +24,10 @@ type AudioProcessor struct {
 	batchSize     int
 }
 
-func NewAudioProcessor(sessions *repository.AudioSessionRepo, stt *service.SttService, rdb *redis.Client, identities *repository.IdentityRepo, ai *service.AIService, encryptionKey []byte) *AudioProcessor {
+func NewAudioProcessor(sessions *repository.AudioSessionRepo, stt *service.SttService, identities *repository.IdentityRepo, ai *service.AIService, encryptionKey []byte) *AudioProcessor {
 	return &AudioProcessor{
 		sessions:      sessions,
 		stt:           stt,
-		redis:         rdb,
 		identities:    identities,
 		ai:            ai,
 		encryptionKey: encryptionKey,
@@ -120,12 +116,6 @@ func (w *AudioProcessor) processOne(ctx context.Context, sess *model.AudioSessio
 		return
 	}
 
-	if w.redis != nil {
-		key := fmt.Sprintf("session:%s", sess.ID)
-		if err := w.redis.Set(ctx, key, text, 24*time.Hour).Err(); err != nil {
-			log.Warn("写 Redis 缓存失败", zap.Error(err))
-		}
-	}
 	log.Info("转写完成", zap.Int("text_len", len(text)))
 
 	// Phase 2：转写完成后进行 AI 分析（身份识别 + 信息提取）。

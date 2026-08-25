@@ -8,7 +8,7 @@ Pulse 后端持续集成（CI）与持续交付（CD）说明。
 |------|----------|------|
 | CI lint | push / PR（`backend/**`） | `gofmt` 检查 + `go vet ./...` + `go vet -tags e2e ./...` |
 | CI test | push / PR | `go test ./... -race`，上传覆盖率产物（含 Phase 2 单测/集成测） |
-| CI e2e | push / PR | 启动 MySQL + Redis，执行迁移后按矩阵跑 Phase 1 / Phase 2 真实基础设施 e2e |
+| CI e2e | push / PR | 启动 MySQL，执行迁移后按矩阵跑 Phase 1 / Phase 2 真实基础设施 e2e |
 | CI docker | push / PR | 构建多阶段 Docker 镜像（不推送） |
 | CD release | 推送 `v*` tag | 构建镜像推送到 GHCR，并创建 GitHub Release |
 
@@ -25,7 +25,7 @@ Pulse 后端持续集成（CI）与持续交付（CD）说明。
 make build        # 编译 backend
 make test         # 单元 + 集成测试（sqlmock，无需外部依赖）
 make test-race    # 带竞态检测
-make test-e2e     # 真实 MySQL/Redis e2e（需 TEST_DATABASE_DSN / TEST_REDIS_URL）
+make test-e2e     # 真实 MySQL e2e（需 TEST_DATABASE_DSN）
 make vet          # go vet（含 e2e build tag）
 make fmt-check    # 检查 gofmt
 make lint         # gofmt + go vet（如安装 golangci-lint 则一并执行）
@@ -44,11 +44,10 @@ docker compose up -d --build
 会依次拉起：
 
 1. `mysql`（mysql:8.0，库名 `pulse`）
-2. `redis`（redis:7-alpine）
-3. `migrate`（一次性执行 `pulse-migrate` 迁移，等待 MySQL 就绪）
-4. `backend`（等待迁移完成后启动，暴露 `8080`）
+2. `migrate`（一次性执行 `pulse-migrate` 迁移，等待 MySQL 就绪）
+3. `backend`（等待迁移完成后启动，暴露 `8080`）
 
-启动后健康检查：`curl -fsS http://localhost:8080/health`，返回 200 表示 MySQL/Redis 均可用。
+启动后健康检查：`curl -fsS http://localhost:8080/health`，返回 200 表示 MySQL 可用。
 
 ## 可覆盖的环境变量（docker compose）
 

@@ -9,7 +9,6 @@
 - **AI SDK**：adk-go（Google Agent Development Kit）
 - **STT 服务**：StepFun StepAudio-2.5-ASR
 - **数据库**：MySQL 8.0+
-- **缓存**：Redis 7+
 - **音频存储**：MySQL（音频二进制存于 audio_sessions 表）
 
 ## 项目结构
@@ -26,7 +25,7 @@ backend/
 │   ├── model/            # 数据模型（user/refresh_token/identity/audio_session/device/extraction）
 │   ├── middleware/       # 中间件（auth/logger/cors/error_handler）
 │   ├── worker/           # 后台处理（转写 → AI 分析流水线）
-│   └── config/           # 配置加载（config/database/redis）
+│   └── config/           # 配置加载（config/database）
 ├── pkg/                  # 公共包（errors/logger/prompt/response/utils）
 ├── test/                 # 真实基础设施 e2e（-tags e2e）
 ├── migrations/           # SQL 迁移（001_init.sql、002_phase2.sql）
@@ -59,7 +58,6 @@ GIN_MODE=debug
 
 # 数据库
 DATABASE_DSN=user:password@tcp(localhost:3306)/pulse?charset=utf8mb4&parseTime=True&loc=Local
-REDIS_URL=redis://localhost:6379
 
 # AI 服务 (adk-go)
 AI_API_KEY=your_ai_api_key
@@ -114,7 +112,7 @@ air
 
 ### 健康检查
 
-- `GET /health` - 健康检查（MySQL / Redis 可用性）
+- `GET /health` - 健康检查（MySQL 可用性）
 
 ### 认证
 
@@ -163,7 +161,7 @@ air
 
 ```bash
 go test ./... -race        # 单元 + 集成测试（sqlmock，无需外部依赖）
-go test -tags e2e ./test/  # 真实 MySQL/Redis e2e
+go test -tags e2e ./test/  # 真实 MySQL e2e
 ```
 
 ### 代码检查
@@ -188,20 +186,20 @@ go run ./cmd/migrate
 docker compose up -d --build
 ```
 
-会拉起 MySQL + Redis + 迁移 + 后端服务，详见 [CI/CD 说明](../docs/backend/ci-cd.md)。
+会拉起 MySQL + 迁移 + 后端服务，详见 [CI/CD 说明](../docs/backend/ci-cd.md)。
 
 ### 常用命令
 
 ```bash
 make build        # 编译
 make test         # 单元/集成测试
-make test-e2e     # 真实 MySQL/Redis e2e
+make test-e2e     # 真实 MySQL e2e
 make docker-up    # 启动全栈
 ```
 
 ### CI/CD
 
-- CI：`.github/workflows/ci.yml`（gofmt + go vet + 单测/竞态 + Phase 1/Phase 2 真实 MySQL/Redis e2e 矩阵 + 镜像构建）
+- CI：`.github/workflows/ci.yml`（gofmt + go vet + 单测/竞态 + Phase 1/2/3 真实 MySQL e2e 矩阵 + 镜像构建）
 - CD：`.github/workflows/release.yml`（打 `v*` tag 推送镜像到 GHCR 并创建 Release）
 
 详见 [docs/backend/ci-cd.md](../docs/backend/ci-cd.md)。

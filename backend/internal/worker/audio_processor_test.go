@@ -61,7 +61,7 @@ func strPtr(s string) *string { return &s }
 func TestAudioProcessorProcessOneSuccess(t *testing.T) {
 	repo, mock := newWorkerMockDB(t)
 	stt := newFakeSTT(t, "hello world", http.StatusOK)
-	w := &AudioProcessor{sessions: repo, stt: stt, redis: nil}
+	w := &AudioProcessor{sessions: repo, stt: stt}
 
 	// 认领 → 写转写 → 置 completed
 	mock.ExpectExec(regexp.QuoteMeta("UPDATE audio_sessions SET status = ?")).
@@ -88,7 +88,7 @@ func TestAudioProcessorProcessOneSuccess(t *testing.T) {
 func TestAudioProcessorProcessOneFailure(t *testing.T) {
 	repo, mock := newWorkerMockDB(t)
 	stt := newFakeSTT(t, "", http.StatusInternalServerError)
-	w := &AudioProcessor{sessions: repo, stt: stt, redis: nil}
+	w := &AudioProcessor{sessions: repo, stt: stt}
 
 	// 认领 → 转写失败 → 置 failed（带 error_message）
 	mock.ExpectExec(regexp.QuoteMeta("UPDATE audio_sessions SET status = ?")).
@@ -112,7 +112,7 @@ func TestAudioProcessorProcessOneFailure(t *testing.T) {
 func TestAudioProcessorProcessOneSkippedWhenAlreadyClaimed(t *testing.T) {
 	repo, mock := newWorkerMockDB(t)
 	stt := newFakeSTT(t, "hello", http.StatusOK)
-	w := &AudioProcessor{sessions: repo, stt: stt, redis: nil}
+	w := &AudioProcessor{sessions: repo, stt: stt}
 
 	// 认领失败（0 行受影响）→ 直接返回，不再转写/更新。
 	mock.ExpectExec(regexp.QuoteMeta("UPDATE audio_sessions SET status = ?")).
@@ -128,7 +128,7 @@ func TestAudioProcessorProcessOneSkippedWhenAlreadyClaimed(t *testing.T) {
 func TestAudioProcessorProcessBatch(t *testing.T) {
 	repo, mock := newWorkerMockDB(t)
 	stt := newFakeSTT(t, "hello", http.StatusOK)
-	w := &AudioProcessor{sessions: repo, stt: stt, redis: nil, batchSize: 5}
+	w := &AudioProcessor{sessions: repo, stt: stt, batchSize: 5}
 
 	// 无 pending 会话时，不做任何处理。
 	mock.ExpectQuery(regexp.QuoteMeta("FROM audio_sessions WHERE status IN (?, ?) ORDER BY created_at ASC LIMIT ?")).
@@ -195,7 +195,7 @@ func TestAudioProcessorDecryptsBeforeTranscribe(t *testing.T) {
 	enc, err := service.EncryptAudio(plain, key)
 	require.NoError(t, err)
 
-	w := &AudioProcessor{sessions: repo, stt: stt, redis: nil, encryptionKey: key}
+	w := &AudioProcessor{sessions: repo, stt: stt, encryptionKey: key}
 
 	mock.ExpectExec(regexp.QuoteMeta("UPDATE audio_sessions SET status = ?")).
 		WithArgs("processing", sqlmock.AnyArg(), "s1", "pending", "processing").

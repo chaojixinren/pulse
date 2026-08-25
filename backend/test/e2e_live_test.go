@@ -1,10 +1,9 @@
 //go:build e2e
 
-// 真实基础设施端到端测试：需要可用的 MySQL 与 Redis。
+// 真实基础设施端到端测试：需要可用的 MySQL。
 // 运行方式：
 //
 //	export TEST_DATABASE_DSN='user:pass@tcp(localhost:3306)/pulse?charset=utf8mb4&parseTime=True&loc=Local'
-//	export TEST_REDIS_URL='redis://localhost:6379'
 //	go test -tags e2e -run TestLiveE2E ./test/ -v
 //
 // 前提：目标库已执行 migrations（go run cmd/migrate/main.go）。
@@ -94,21 +93,16 @@ func (c *liveClient) upload(t *testing.T, filename string, content []byte, field
 
 func TestLiveE2EFullFlow(t *testing.T) {
 	dsn := os.Getenv("TEST_DATABASE_DSN")
-	redisURL := os.Getenv("TEST_REDIS_URL")
-	if dsn == "" || redisURL == "" {
-		t.Skip("跳过真实基础设施 e2e：需设置 TEST_DATABASE_DSN 与 TEST_REDIS_URL")
+	if dsn == "" {
+		t.Skip("跳过真实基础设施 e2e：需设置 TEST_DATABASE_DSN")
 	}
 
 	db, err := config.InitDB(dsn)
 	require.NoError(t, err)
 	defer db.Close()
 
-	rdb, err := config.InitRedis(redisURL)
-	require.NoError(t, err)
-	defer rdb.Close()
-
 	cfg := &config.Config{JWTSecret: "live-e2e-secret", GINMode: gin.TestMode, MaxAudioSize: 1024 * 1024, JWTExpiresIn: time.Hour, RefreshTokenTTL: 7 * 24 * time.Hour}
-	router, _ := api.NewRouter(cfg, db, rdb)
+	router, _ := api.NewRouter(cfg, db)
 
 	srv := httptest.NewServer(router)
 	defer srv.Close()

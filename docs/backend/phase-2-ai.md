@@ -174,4 +174,4 @@ internal/model/device.go
 | 心跳更新电量/版本 | `device_test.go`、`device_extended_test.go` | `e2e_test.go` |
 | 指令下发（落库） | `device_test.go`、`device_extended_test.go` | `e2e_phase2_test.go` |
 
-真实基础设施 e2e（需 MySQL/Redis，先执行 migrations）见 `test/e2e_live_test.go` 与 `test/e2e_live_phase2_test.go`（`go test -tags e2e`）。
+真实基础设施 e2e（需 MySQL，先执行 migrations）见 `test/e2e_live_test.go` 与 `test/e2e_live_phase2_test.go`（`go test -tags e2e`）。

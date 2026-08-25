@@ -16,7 +16,6 @@ type Config struct {
 	Port     string
 	GINMode  string
 	MySQLDSN string
-	RedisURL string
 
 	StepFunAPIKey   string
 	StepFunBaseURL  string
@@ -39,10 +38,6 @@ type Config struct {
 
 	// AudioEncryptionKey 为 AES-256-GCM 的 32 字节密钥（base64 解码后）；空表示关闭加密存储。
 	AudioEncryptionKey []byte
-
-	// 限流配额（次/分钟）
-	RateLimitAuthPerMin   int
-	RateLimitUploadPerMin int
 }
 
 // Load 从 .env 与环境变量读取配置并校验。
@@ -83,20 +78,10 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
-	authRate, err := strconv.Atoi(getEnv("RATE_LIMIT_AUTH_PER_MIN", "20"))
-	if err != nil {
-		return nil, fmt.Errorf("RATE_LIMIT_AUTH_PER_MIN 配置无效: %w", err)
-	}
-	uploadRate, err := strconv.Atoi(getEnv("RATE_LIMIT_UPLOAD_PER_MIN", "30"))
-	if err != nil {
-		return nil, fmt.Errorf("RATE_LIMIT_UPLOAD_PER_MIN 配置无效: %w", err)
-	}
-
 	cfg := &Config{
 		Port:                  getEnv("PORT", "8080"),
 		GINMode:               getEnv("GIN_MODE", "debug"),
 		MySQLDSN:              os.Getenv("DATABASE_DSN"),
-		RedisURL:              getEnv("REDIS_URL", "redis://localhost:6379"),
 		StepFunAPIKey:         os.Getenv("STEPFUN_API_KEY"),
 		StepFunBaseURL:        getEnv("STEPFUN_API_BASE", "https://api.stepfun.com/v1"),
 		StepFunSTTModel:       getEnv("STEPFUN_STT_MODEL", "stepaudio-2.5-asr"),
@@ -112,8 +97,6 @@ func Load() (*Config, error) {
 		MaxAudioSize:          maxAudioSize,
 		AudioRetentionDays:    retention,
 		AudioEncryptionKey:    encKey,
-		RateLimitAuthPerMin:   authRate,
-		RateLimitUploadPerMin: uploadRate,
 	}
 
 	if err := cfg.validate(); err != nil {

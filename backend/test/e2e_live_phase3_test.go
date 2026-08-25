@@ -1,11 +1,10 @@
 //go:build e2e
 
-// 真实基础设施端到端测试（Phase 3）：报告、数据导出/注销、限流。
+// 真实基础设施端到端测试（Phase 3）：报告、数据导出/注销、音频加密。
 // 运行方式与前置条件见 e2e_live_test.go 顶部说明。
 package test
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"net/http"
@@ -23,33 +22,21 @@ import (
 	"github.com/chaojixinren/pulse/internal/service"
 )
 
-// setupPhase3 打开真实 DB/Redis，构造路由并清理限流键，隔离各用例。
-func setupPhase3(t *testing.T, dsn, redisURL string, authLimit int) (*httptest.Server, *sql.DB) {
+// setupPhase3 打开真实 DB 并构造路由。
+func setupPhase3(t *testing.T, dsn string) (*httptest.Server, *sql.DB) {
 	t.Helper()
 	db, err := config.InitDB(dsn)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
-	rdb, err := config.InitRedis(redisURL)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = rdb.Close() })
-
-	ctx := context.Background()
-	keys, _ := rdb.Keys(ctx, "ratelimit:*").Result()
-	if len(keys) > 0 {
-		_ = rdb.Del(ctx, keys...)
-	}
-
 	cfg := &config.Config{
-		JWTSecret:             "live-e2e-phase3-secret",
-		GINMode:               gin.TestMode,
-		MaxAudioSize:          1024 * 1024,
-		JWTExpiresIn:          time.Hour,
-		RefreshTokenTTL:       7 * 24 * time.Hour,
-		RateLimitAuthPerMin:   authLimit,
-		RateLimitUploadPerMin: 30,
+		JWTSecret:       "live-e2e-phase3-secret",
+		GINMode:         gin.TestMode,
+		MaxAudioSize:    1024 * 1024,
+		JWTExpiresIn:    time.Hour,
+		RefreshTokenTTL: 7 * 24 * time.Hour,
 	}
-	router, _ := api.NewRouter(cfg, db, rdb)
+	router, _ := api.NewRouter(cfg, db)
 	srv := httptest.NewServer(router)
 	t.Cleanup(srv.Close)
 	return srv, db
@@ -57,11 +44,10 @@ func setupPhase3(t *testing.T, dsn, redisURL string, authLimit int) (*httptest.S
 
 func TestLiveE2EPhase3Flow(t *testing.T) {
 	dsn := os.Getenv("TEST_DATABASE_DSN")
-	redisURL := os.Getenv("TEST_REDIS_URL")
-	if dsn == "" || redisURL == "" {
-		t.Skip("跳过真实基础设施 e2e：需设置 TEST_DATABASE_DSN 与 TEST_REDIS_URL")
+	if dsn == "" {
+		t.Skip("跳过真实基础设施 e2e：需设置 TEST_DATABASE_DSN")
 	}
-	srv, db := setupPhase3(t, dsn, redisURL, 100)
+	srv, db := setupPhase3(t, dsn)
 
 	email := fmt.Sprintf("e2e-p3-%d@example.com", time.Now().UnixNano())
 	c := &liveClient{base: srv.URL}
@@ -99,46 +85,17 @@ func TestLiveE2EPhase3Flow(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, "注销后应无法登录")
 }
 
-func TestLiveE2EPhase3RateLimit(t *testing.T) {
-	dsn := os.Getenv("TEST_DATABASE_DSN")
-	redisURL := os.Getenv("TEST_REDIS_URL")
-	if dsn == "" || redisURL == "" {
-		t.Skip("跳过真实基础设施 e2e：需设置 TEST_DATABASE_DSN 与 TEST_REDIS_URL")
-	}
-	srv, db := setupPhase3(t, dsn, redisURL, 3)
-
-	email := fmt.Sprintf("e2e-p3-limit-%d@example.com", time.Now().UnixNano())
-	c := &liveClient{base: srv.URL}
-	defer func() { _, _ = db.Exec("DELETE FROM users WHERE email = ?", email) }()
-
-	// 注册（第 1 次 auth 请求）
-	_, reg := c.json(t, http.MethodPost, "/api/v1/auth/register", map[string]string{"email": email, "password": "secret123", "name": "L"})
-
-	// 连续登录，超过限额后应返回 429。
-	var last int
-	for i := 0; i < 5; i++ {
-		resp, _ := c.json(t, http.MethodPost, "/api/v1/auth/login", map[string]string{"email": email, "password": "secret123"})
-		last = resp.StatusCode
-	}
-	assert.Equal(t, http.StatusTooManyRequests, last, "超过限额应返回 429（register: %v）", reg)
-}
-
 // TestLiveE2EPhase3Encryption 验收「audio_data 中存储的是密文」：
 // 配置 AUDIO_ENCRYPTION_KEY 后上传音频，直接读取数据库中的 audio_data 应为密文且可解密回原文。
 func TestLiveE2EPhase3Encryption(t *testing.T) {
 	dsn := os.Getenv("TEST_DATABASE_DSN")
-	redisURL := os.Getenv("TEST_REDIS_URL")
-	if dsn == "" || redisURL == "" {
-		t.Skip("跳过真实基础设施 e2e：需设置 TEST_DATABASE_DSN 与 TEST_REDIS_URL")
+	if dsn == "" {
+		t.Skip("跳过真实基础设施 e2e：需设置 TEST_DATABASE_DSN")
 	}
 
 	db, err := config.InitDB(dsn)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
-
-	rdb, err := config.InitRedis(redisURL)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = rdb.Close() })
 
 	key := make([]byte, 32)
 	for i := range key {
@@ -146,16 +103,14 @@ func TestLiveE2EPhase3Encryption(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		JWTSecret:             "live-e2e-phase3-enc-secret",
-		GINMode:               gin.TestMode,
-		MaxAudioSize:          1024 * 1024,
-		JWTExpiresIn:          time.Hour,
-		RefreshTokenTTL:       7 * 24 * time.Hour,
-		AudioEncryptionKey:    key,
-		RateLimitAuthPerMin:   100,
-		RateLimitUploadPerMin: 100,
+		JWTSecret:          "live-e2e-phase3-enc-secret",
+		GINMode:            gin.TestMode,
+		MaxAudioSize:       1024 * 1024,
+		JWTExpiresIn:       time.Hour,
+		RefreshTokenTTL:    7 * 24 * time.Hour,
+		AudioEncryptionKey: key,
 	}
-	router, _ := api.NewRouter(cfg, db, rdb)
+	router, _ := api.NewRouter(cfg, db)
 	srv := httptest.NewServer(router)
 	t.Cleanup(srv.Close)
 

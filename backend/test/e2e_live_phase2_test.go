@@ -19,24 +19,19 @@ import (
 )
 
 // TestLiveE2EPhase2Devices 覆盖 Phase 2 设备管理的真实基础设施端到端流程。
-// 运行方式见 e2e_live_test.go；需先执行 migrations 并设置 TEST_DATABASE_DSN / TEST_REDIS_URL。
+// 运行方式见 e2e_live_test.go；需先执行 migrations 并设置 TEST_DATABASE_DSN。
 func TestLiveE2EPhase2Devices(t *testing.T) {
 	dsn := os.Getenv("TEST_DATABASE_DSN")
-	redisURL := os.Getenv("TEST_REDIS_URL")
-	if dsn == "" || redisURL == "" {
-		t.Skip("跳过真实基础设施 e2e：需设置 TEST_DATABASE_DSN 与 TEST_REDIS_URL")
+	if dsn == "" {
+		t.Skip("跳过真实基础设施 e2e：需设置 TEST_DATABASE_DSN")
 	}
 
 	db, err := config.InitDB(dsn)
 	require.NoError(t, err)
 	defer db.Close()
 
-	rdb, err := config.InitRedis(redisURL)
-	require.NoError(t, err)
-	defer rdb.Close()
-
 	cfg := &config.Config{JWTSecret: "live-e2e-secret", GINMode: gin.TestMode, MaxAudioSize: 1024 * 1024, JWTExpiresIn: time.Hour, RefreshTokenTTL: 7 * 24 * time.Hour}
-	router, _ := api.NewRouter(cfg, db, rdb)
+	router, _ := api.NewRouter(cfg, db)
 
 	srv := httptest.NewServer(router)
 	defer srv.Close()

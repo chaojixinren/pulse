@@ -93,19 +93,9 @@ jobs:
           --health-timeout=5s
           --health-retries=30
           --health-start-period=30s
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd="redis-cli ping"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=20
     env:
       DATABASE_DSN: 'root:rootpass@tcp(127.0.0.1:3306)/pulse?charset=utf8mb4&parseTime=True&loc=Local'
       TEST_DATABASE_DSN: 'root:rootpass@tcp(127.0.0.1:3306)/pulse?charset=utf8mb4&parseTime=True&loc=Local'
-      TEST_REDIS_URL: 'redis://127.0.0.1:6379'
       JWT_SECRET: ci-secret
     steps:
       - name: Checkout

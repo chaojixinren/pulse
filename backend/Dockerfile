@@ -24,7 +24,7 @@ COPY migrations ./migrations
 USER pulse
 EXPOSE 8080
 
-# /health 返回 200（健康）或 503（MySQL/Redis 不可用），curl -f 据此判定就绪
+# /health 返回 200（健康）或 503（MySQL 不可用），curl -f 据此判定就绪
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=5 CMD curl -fsS http://127.0.0.1:8080/health > /dev/null || exit 1
 
 ENTRYPOINT ["pulse-server"]

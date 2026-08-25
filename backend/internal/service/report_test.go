@@ -19,7 +19,7 @@ func newReportService(t *testing.T) (*ReportService, sqlmock.Sqlmock) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
-	return NewReportService(repository.NewAudioSessionRepo(db), repository.NewIdentityRepo(db), nil), mock
+	return NewReportService(repository.NewAudioSessionRepo(db), repository.NewIdentityRepo(db)), mock
 }
 
 func TestReportLocation(t *testing.T) {
