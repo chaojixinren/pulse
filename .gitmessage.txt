@@ -1,0 +1,21 @@
+# <type>(<scope>): <subject>
+# |<---- Using max 50 chars ---->|
+
+# Explain what and why (not how)
+# |<---- Try to limit each line to a maximum of 72 characters ---->|
+
+# Provide links to any relevant tickets, articles or other resources
+# Example: Closes #123
+
+# --- COMMIT END ---
+# Type can be:
+#   feat    ✨   A new feature
+#   fix     🐛   A bug fix
+#   docs    📝   Documentation only changes
+#   style   💄   Changes that do not affect the meaning of the code
+#   refactor ♻️   A code change that neither fixes a bug nor adds a feature
+#   perf    ⚡️   A code change that improves performance
+#   test    ✅   Adding missing tests or correcting existing tests
+#   chore   🔧   Changes to the build process or auxiliary tools
+#   ci      🎡   Changes to CI configuration files and scripts
+#   revert  ⏪   Revert to a previous commit

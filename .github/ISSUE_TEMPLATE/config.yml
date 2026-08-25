@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 Discord 社区
+    url: https://discord.gg/pulse
+    about: 加入我们的 Discord 社区获取帮助
+  - name: 📧 邮件支持
+    url: mailto:dev@pulse.example.com
+    about: 发送邮件获取支持
+  - name: 📖 文档
+    url: https://docs.pulse.example.com
+    about: 查看官方文档

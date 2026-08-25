@@ -1,0 +1,6 @@
+
+# Go test artifacts
+*.test
+*.out
+test_*.wav
+test_*.pcm
