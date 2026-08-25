@@ -22,7 +22,7 @@
 
 ### 目录 / 文件
 ```
-cmd/server/main.go          # 入口：加载配置 → 初始化 logger/DB/Redis → 注册路由 → 启动
+cmd/server/main.go          # 入口：加载配置 → 初始化 logger/DB → 注册路由 → 启动
 internal/config/config.go   # 从 .env 读取配置，封装 Config struct
 pkg/logger/logger.go        # zap 封装，暴露全局 Log
 pkg/response/response.go    # 统一 JSON 响应 + 错误映射
@@ -37,7 +37,6 @@ type Config struct {
     Port        string
     GINMode     string
     MySQLDSN    string
-    RedisURL    string
     StepFunAPIKey  string
     StepFunBaseURL string
     JWTSecret      string
@@ -46,7 +45,7 @@ type Config struct {
 ```
 
 ### 关键接口
-- `GET /health` → `{"code":0,"message":"ok"}`，同时 ping MySQL/Redis，任一失败返回 503。
+- `GET /health` → `{"code":0,"message":"ok"}`，同时 ping MySQL，失败返回 503。
 
 ### 验收标准
 - [ ] `go run cmd/server/main.go` 可启动，`/health` 返回 200。
@@ -245,7 +244,6 @@ func (s *SttService) Transcribe(ctx, data []byte, filename string) (text string,
 2. 置 status=processing
 3. 读 audio_data，调 stt.Transcribe(bytes, filename)
 4. 成功：写 transcript，置 completed；失败：置 failed + error_message
-5. 结果写 Redis 缓存（key: session:{id}）
 ```
 
 ### 注意
@@ -355,7 +353,7 @@ type DailyReport struct {
 ## 验收结论（自动化测试逐项核对）
 
 > 执行 `cd backend && go test ./...`，共 **99** 项测试断言全部通过（0 失败）。
-> 测试分层：**单元测试**（model/pkg 纯逻辑）、**集成测试**（repository/service 用 go-sqlmock 模拟 MySQL，STT 用 httptest 假服务）、**E2E**（httptest 全路由；另有 `//go:build e2e` 的 `test/e2e_live_test.go` 面向真实 MySQL/Redis，需设置 `TEST_DATABASE_DSN`/`TEST_REDIS_URL`）。
+> 测试分层：**单元测试**（model/pkg 纯逻辑）、**集成测试**（repository/service 用 go-sqlmock 模拟 MySQL，STT 用 httptest 假服务）、**E2E**（httptest 全路由；另有 `//go:build e2e` 的 `test/e2e_live_test.go` 面向真实 MySQL，需设置 `TEST_DATABASE_DSN`）。
 
 | 模块 | 验收标准 | 结果 | 对应测试 |
 |------|---------|------|---------|
@@ -381,7 +379,7 @@ type DailyReport struct {
 
 ## Phase 1 整体验收清单
 
-- [x] `/health` 正常，能连 MySQL + Redis。
+- [x] `/health` 正常，能连 MySQL。
 - [x] 用户可注册/登录，受保护接口需 JWT。
 - [x] 硬件可上传音频，返回 session_id。
 - [x] 音频自动转写为文本，会话状态为 completed。

@@ -44,7 +44,7 @@ Pulse/
 cd backend
 go mod download
 cp .env.example .env
-# 配置环境变量（数据库、Redis、API keys 等）
+# 配置环境变量（数据库、API keys 等）
 go run cmd/server/main.go
 ```
 
@@ -78,8 +78,8 @@ npm run dev
 - **框架**：Gin
 - **AI SDK**：adk-go（Google Agent Development Kit）
 - **STT 服务**：StepFun StepAudio-2.5-ASR
-- **数据库**：MySQL + Redis
-- **对象存储**：七牛云
+- **数据库**：MySQL
+- **音频存储**：MySQL（audio_sessions.audio_data，LONGBLOB）
 
 ### 前端
 - **框架**：React

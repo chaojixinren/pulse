@@ -12,8 +12,7 @@ Pulse 是一个智能身份空间系统，通过可穿戴硬件设备采集用�
 - **AI SDK**: adk-go（Google Agent Development Kit）
 - **STT 服务**: StepFun StepAudio-2.5-ASR
 - **数据库**: MySQL 8.0+ (主数据)
-- **缓存**: Redis 7+ (会话、热点数据)
-- **存储**: 七牛云 (语音文件)
+- **音频存储**: MySQL (audio_sessions.audio_data, LONGBLOB)
 
 ### 前端
 - **框架**: React 18+

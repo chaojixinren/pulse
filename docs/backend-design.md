@@ -19,7 +19,7 @@
 ┌─────────────────────────────────────────────────────────────┐
 │                      Gin Web Server (Go)                      │
 │  ┌──────────────┬──────────────┬──────────────────────────┐ │
-│  │ 认证中间件    │  日志中间件   │  限流中间件               │ │
+│  │ 认证中间件    │  日志中间件   │  CORS 中间件              │ │
 │  └──────────────┴──────────────┴──────────────────────────┘ │
 │  ┌──────────────┬──────────────┬──────────────────────────┐ │
 │  │  Auth API    │  Audio API   │  Identity API            │ │
@@ -28,20 +28,20 @@
 │  └──────────────┴──────────────┴──────────────────────────┘ │
 └──────────────────────┬──────────────────────────────────────┘
                        │
-       ┌──────────────┬──────────────┬──────────────┐
-       │              │              │              │
-       ↓              ↓              ↓
-┌─────────────┐ ┌─────────────┐ ┌──────────────┐
-│    MySQL    │ │   Redis     │ │  AI Service  │
-│  (主数据库)  │ │   (缓存)    │ │(adk-go)       │
-│  (含音频)    │ │             │ │              │
-└─────────────┘ └─────────────┘ └──────┬───────┘
-                                       │
-                                       ↓
-                              ┌──────────────────┐
-                              │  StepFun STT API │
-                              │ (StepAudio-2.5)  │
-                              └──────────────────┘
+            ┌───────────┴───────────┐
+            │                       │
+            ↓                       ↓
+┌─────────────┐             ┌──────────────┐
+│    MySQL    │             │  AI Service  │
+│  (主数据库)  │             │  (adk-go)    │
+│  (含音频)    │             │              │
+└─────────────┘             └──────┬───────┘
+                                   │
+                                   ↓
+                          ┌──────────────────┐
+                          │  StepFun STT API │
+                          │ (StepAudio-2.5)  │
+                          └──────────────────┘
 ```
 
 ### 1.2 分层架构
@@ -50,7 +50,7 @@
 ┌─────────────────────────────────────────┐
 │          API Layer (Gin Router)         │  HTTP 请求处理、参数验证
 ├─────────────────────────────────────────┤
-│        Middleware Layer                 │  认证、日志、CORS、限流
+│        Middleware Layer                 │  认证、日志、CORS
 ├─────────────────────────────────────────┤
 │         Service Layer                   │  业务逻辑处理
 │  - AuthService                          │
@@ -66,7 +66,6 @@
 ├─────────────────────────────────────────┤
 │        Infrastructure Layer             │  基础设施
 │  - Database (MySQL)                     │
-│  - Cache (Redis)                        │
 │  - Storage (MySQL LONGBLOB)             │
 │  - AI Client (adk-go)                    │
 └─────────────────────────────────────────┘
@@ -691,7 +690,6 @@ adk-go v2 用 `sequentialagent` 将多个子 agent 串成工作流，由 `runner
 │     - identity_id                       │
 │     - extracted_data                    │
 │     - status = completed                │
-│  7. 缓存结果到 Redis                    │
 └─────────────────────────────────────────┘
      │
      │ 3. 通知客户端
@@ -809,7 +807,6 @@ package service
 import (
     "context"
     "encoding/json"
-    "fmt"
     "log"
 
     "github.com/chaojixinren/pulse/internal/model"
@@ -822,7 +819,6 @@ type AudioService struct {
     identityRepo  *repository.IdentityRepository
     aiService     *AIService
     sttService    *SttService
-    cache         *redis.Client
 }
 
 func (s *AudioService) ProcessAudioAsync(sessionID uuid.UUID) {
@@ -883,9 +879,6 @@ func (s *AudioService) ProcessAudioAsync(sessionID uuid.UUID) {
         return
     }
 
-    // 8. 缓存结果
-    s.cacheSession(ctx, session)
-
     log.Printf("Successfully processed audio session %s", sessionID)
 }
 
@@ -897,11 +890,6 @@ func (s *AudioService) handleProcessError(ctx context.Context, session *model.Au
     }
 }
 
-func (s *AudioService) cacheSession(ctx context.Context, session *model.AudioSession) {
-    key := fmt.Sprintf("session:%s", session.ID)
-    data, _ := json.Marshal(session)
-    s.cache.Set(ctx, key, data, 1*time.Hour)
-}
 ```
 
 ## 6. 安全设计
@@ -1059,76 +1047,6 @@ func AuthMiddleware(authService *service.AuthService) gin.HandlerFunc {
 }
 ```
 
-### 6.3 限流中间件
-
-```go
-// internal/middleware/rate_limit.go
-package middleware
-
-import (
-    "net/http"
-    "time"
-
-    "github.com/gin-gonic/gin"
-    "github.com/go-redis/redis/v8"
-    "golang.org/x/time/rate"
-)
-
-// RateLimitMiddleware 基于 Token Bucket 的限流
-func RateLimitMiddleware(r *redis.Client, limit int, window time.Duration) gin.HandlerFunc {
-    limiter := rate.NewLimiter(rate.Every(window/time.Duration(limit)), limit)
-
-    return func(c *gin.Context) {
-        if !limiter.Allow() {
-            c.JSON(http.StatusTooManyRequests, gin.H{
-                "error": "请求过于频繁，请稍后重试",
-            })
-            c.Abort()
-            return
-        }
-
-        c.Next()
-    }
-}
-
-// UserRateLimitMiddleware 基于用户的限流
-func UserRateLimitMiddleware(r *redis.Client, maxRequests int, window time.Duration) gin.HandlerFunc {
-    return func(c *gin.Context) {
-        userID := c.GetString("user_id")
-        if userID == "" {
-            c.Next()
-            return
-        }
-
-        key := "rate_limit:user:" + userID
-        ctx := c.Request.Context()
-
-        // 检查当前请求数
-        count, err := r.Incr(ctx, key).Result()
-        if err != nil {
-            c.Next()
-            return
-        }
-
-        // 首次请求设置过期时间
-        if count == 1 {
-            r.Expire(ctx, key, window)
-        }
-
-        // 超过限制
-        if count > int64(maxRequests) {
-            c.JSON(http.StatusTooManyRequests, gin.H{
-                "error": "超过请求限制",
-            })
-            c.Abort()
-            return
-        }
-
-        c.Next()
-    }
-}
-```
-
 ### 6.4 数据加密
 
 #### 语音文件加密存储
@@ -1263,12 +1181,10 @@ services:
     environment:
       - PORT=8080
       - DATABASE_DSN=pulse:password@tcp(mysql:3306)/pulse?charset=utf8mb4&parseTime=True&loc=Local
-      - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET}
 
     depends_on:
       - mysql
-      - redis
 
   mysql:
     image: mysql:8.0
@@ -1282,16 +1198,8 @@ services:
     ports:
       - "3306:3306"
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-
 volumes:
   mysql_data:
-  redis_data:
 ```
 
 ### 7.2 环境变量配置
@@ -1303,7 +1211,6 @@ GIN_MODE=release
 
 # 数据库
 DATABASE_DSN=user:pass@tcp(host:3306)/pulse?charset=utf8mb4&parseTime=True&loc=Local
-REDIS_URL=redis://:password@host:6379/0
 
 # 音频存储在 MySQL（audio_sessions.audio_data），无需对象存储
 
@@ -1353,64 +1260,6 @@ func InitDB(dsn string) (*sql.DB, error) {
     }
 
     return db, nil
-}
-```
-
-### 8.2 Redis 缓存策略
-
-```go
-// internal/service/cache_service.go
-package service
-
-import (
-    "context"
-    "encoding/json"
-    "fmt"
-    "time"
-
-    "github.com/go-redis/redis/v8"
-)
-
-type CacheService struct {
-    client *redis.Client
-}
-
-// 缓存用户会话列表
-func (s *CacheService) CacheUserSessions(ctx context.Context, userID string, sessions []*model.AudioSession) error {
-    key := fmt.Sprintf("user:%s:sessions", userID)
-    data, err := json.Marshal(sessions)
-    if err != nil {
-        return err
-    }
-
-    return s.client.Set(ctx, key, data, 15*time.Minute).Err()
-}
-
-// 缓存身份列表
-func (s *CacheService) CacheIdentities(ctx context.Context, userID string, identities []*model.Identity) error {
-    key := fmt.Sprintf("user:%s:identities", userID)
-    data, err := json.Marshal(identities)
-    if err != nil {
-        return err
-    }
-
-    // 身份变化不频繁，可以缓存更久
-    return s.client.Set(ctx, key, data, 1*time.Hour).Err()
-}
-
-// 失效缓存
-func (s *CacheService) InvalidateUserCache(ctx context.Context, userID string) error {
-    pattern := fmt.Sprintf("user:%s:*", userID)
-    keys, err := s.client.Keys(ctx, pattern).Result()
-    if err != nil {
-        return err
-    }
-
-    if len(keys) > 0 {
-        return s.client.Del(ctx, keys...).Err()
-    }
-
-    return nil
 }
 ```
 
@@ -1539,7 +1388,7 @@ func Init(environment string) {
 3. **数据库设计**：设计了合理的表结构，支持用户、身份、语音会话等核心实体
 4. **AI 集成**：基于 adk-go 实现语音转文字、身份识别、信息提取的完整工作流
 5. **业务流程**：明确了语音上传、处理、分析的端到端流程
-6. **安全设计**：实现了 JWT 认证、限流、数据加密等安全机制
+6. **安全设计**：实现了 JWT 认证、数据加密等安全机制
 
 下一步可以：
 - 实现具体的代码模块

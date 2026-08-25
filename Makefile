@@ -9,7 +9,7 @@ help: ## 列出常用命令
 	@echo "  make build         编译 backend 二进制"
 	@echo "  make test          运行单元/集成测试（sqlmock，无需外部依赖）"
 	@echo "  make test-race     带竞态检测运行测试"
-	@echo "  make test-e2e      运行真实 MySQL/Redis e2e（需 TEST_DATABASE_DSN / TEST_REDIS_URL）"
+	@echo "  make test-e2e      运行真实 MySQL e2e（需 TEST_DATABASE_DSN）"
 	@echo "  make vet           go vet（含 e2e build tag）"
 	@echo "  make fmt-check     检查 gofmt"
 	@echo "  make lint          gofmt + go vet（如安装 golangci-lint 则一并执行）"
