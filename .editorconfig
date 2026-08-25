@@ -1,0 +1,26 @@
+# EditorConfig 配置文件
+# https://editorconfig.org
+
+root = true
+
+# 默认配置
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# TypeScript/JavaScript
+[*.{ts,tsx,js,jsx}]
+indent_size = 2
+
+# JSON/YAML
+[*.{json,yml,yaml}]
+indent_size = 2
+
+# Markdown
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = 120

@@ -30,7 +30,16 @@ backend/.npm
 backend/.eslintcache
 backend/coverage/
 
-# Frontend (Flutter)
+# Frontend (React/TypeScript)
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.npm
+frontend/.eslintcache
+frontend/coverage/
+frontend/.vite/
+
+# Frontend (Flutter - if used in future)
 frontend/.dart_tool/
 frontend/.flutter-plugins
 frontend/.flutter-plugins-dependencies
