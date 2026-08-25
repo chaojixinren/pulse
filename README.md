@@ -103,6 +103,101 @@ npm run dev
 - **开发环境**：VSCode + PlatformIO
 - **语言**：C / Arduino
 
+## 开发指南
+
+### 快速 Setup
+
+```bash
+# 1. 运行配置脚本
+./setup.sh
+
+# 2. 启动开发环境
+make docker-up
+
+# 3. 访问服务
+# - 后端 API: http://localhost:8080
+# - 前端: http://localhost:5173
+```
+
+### 常用命令
+
+```bash
+# 后端
+make build          # 编译后端
+make test           # 运行测试
+make lint           # Lint 检查
+make docker-up      # 启动开发环境
+make docker-down    # 停止开发环境
+
+# 前端
+cd frontend
+npm run dev         # 启动开发服务器
+npm run lint        # ESLint 检查
+npm run type-check  # TypeScript 类型检查
+npm run build       # 生产构建
+npm test            # 运行测试
+```
+
+### 分支策略
+
+- `main` / `master` - 生产环境
+- `develop` - 开发分支
+- `feature/xxx` - 功能开发分支
+- `fix/xxx` - Bug 修复分支
+- `docs/xxx` - 文档更新分支
+
+### Git 工作流程
+
+我们遵循 [Conventional Commits](https://www.conventionalcommits.org/) 规范：
+
+```bash
+# 创建功能分支
+git checkout -b feature/user-authentication
+
+# 提交（会自动触发 Git hooks 检查）
+git commit -m "feat(auth): add OAuth2 authentication"
+
+# 推送并创建 PR
+git push origin feature/user-authentication
+```
+
+### Code Review
+
+所有 PR 都需要经过：
+
+1. ✅ CI/CD 自动化检查
+2. 👀 至少一位维护者审查
+3. ✅ LGTM（Looks Good To Me）
+4. 🔀 Squash Merge
+
+详细流程请查看 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+## CI/CD
+
+项目使用 GitHub Actions 进行自动化：
+
+- **Backend CI**: Lint → Test → E2E → Docker Build
+- **Frontend CI**: Lint → Type-Check → Test → Build
+- **Release**: 自动创建 Release 和 Changelog
+
+查看 [.github/workflows/](.github/workflows/) 了解详情。
+
+## 贡献指南
+
+我们欢迎任何形式的贡献！请查看 [CONTRIBUTING.md](CONTRIBUTING.md) 了解：
+
+- 📖 完整的开发流程
+- 💻 代码规范（Go / TypeScript）
+- 📝 提交信息规范
+- 🔀 Code Review 流程
+- 🌟 社区准则
+
+### 贡献者
+
+感谢所有为 Pulse 项目做出贡献的人！ 🙏
+
+[贡献者列表](https://github.com/chaojixinren/pulse/graphs/contributors)
+
 ## 开发路线图
 
 - [x] 项目架构设计
@@ -124,6 +219,7 @@ npm run dev
 3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
 5. 提交 Pull Request
+
 
 ## 许可证
 
