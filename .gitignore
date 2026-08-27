@@ -30,16 +30,7 @@ backend/.npm
 backend/.eslintcache
 backend/coverage/
 
-# Frontend (React/TypeScript)
-frontend/node_modules/
-frontend/dist/
-frontend/build/
-frontend/.npm
-frontend/.eslintcache
-frontend/coverage/
-frontend/.vite/
-
-# Frontend (Flutter - if used in future)
+# Frontend (Flutter)
 frontend/.dart_tool/
 frontend/.flutter-plugins
 frontend/.flutter-plugins-dependencies
@@ -60,13 +51,15 @@ frontend/android/app/release/
 frontend/pubspec.lock
 
 # Hardware (ESP32/PlatformIO)
+hardware/firmware/.claude/
 hardware/firmware/.pio/
 hardware/firmware/.vscode/
-hardware/firmware/.pioenvs/
-hardware/firmware/.piolibdeps/
-hardware/firmware/lib/readme.txt
-hardware/firmware/.clang_complete
-hardware/firmware/.gcc-flags.json
+hardware/firmware/lib/README
+hardware/firmware/include/README
+hardware/firmware/pc_sim/
+hardware/firmware/test/
+hardware/firmware/src/tests/
+hardware/firmware/tools/
 
 # Database
 *.sqlite
