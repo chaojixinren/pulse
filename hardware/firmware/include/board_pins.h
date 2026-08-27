@@ -42,12 +42,12 @@
 #define PIN_TP_INT 14 /* 低电平有效 */
 
 /* ───────────────── TF 卡 (SDMMC 4-bit) ───────────────── */
-#define PIN_SD_D0 45
-#define PIN_SD_D1 46
-#define PIN_SD_D2 39
-#define PIN_SD_D3 40
-#define PIN_SD_CMD 41
-#define PIN_SD_CLK 42
+#define PIN_SD_D0 42
+#define PIN_SD_D1 45
+#define PIN_SD_D2 38
+#define PIN_SD_D3 39
+#define PIN_SD_CMD 40
+#define PIN_SD_CLK 41
 
 /* ───────────────── USB ───────────────── */
 #define PIN_USB_DN 19
