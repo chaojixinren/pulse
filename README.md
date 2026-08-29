@@ -1,5 +1,9 @@
 # Pulse - 时笺
 
+<p align="center">
+  <img src="banner.svg" alt="Pulse 时笺" width="100%" />
+</p>
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
 
