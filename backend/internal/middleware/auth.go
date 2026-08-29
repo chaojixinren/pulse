@@ -34,12 +34,18 @@ func Auth(cfg *config.Config) gin.HandlerFunc {
 }
 
 func extractToken(c *gin.Context) string {
+	return extractSchemeToken(c, "Bearer")
+}
+
+// extractSchemeToken 解析 "Authorization: <scheme> <token>"，scheme 不匹配时返回空串。
+// 用户态用 Bearer，设备态用 Device，两者共用同一套解析逻辑。
+func extractSchemeToken(c *gin.Context, scheme string) string {
 	auth := c.GetHeader("Authorization")
 	if auth == "" {
 		return ""
 	}
 	parts := strings.SplitN(auth, " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+	if len(parts) != 2 || !strings.EqualFold(parts[0], scheme) {
 		return ""
 	}
 	return strings.TrimSpace(parts[1])

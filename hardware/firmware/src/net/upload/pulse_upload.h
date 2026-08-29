@@ -1,6 +1,6 @@
 /**
  * @file pulse_upload.h
- * @brief 上传层：spool 队列 → multipart/form-data → POST /api/v1/audio/upload
+ * @brief 上传层：spool 队列 → multipart/form-data → POST /api/v1/device/audio/upload
  *
  * 与后端的契约（读代码得来，非猜测）
  * ----------------------------------
@@ -9,15 +9,24 @@
  *   - 文件名扩展必须是 .wav/.mp3/.m4a 之一，且**与文件头魔数一致**
  *     （detectAudioExt 会校验 RIFF/WAVE，不一致直接 400）
  *   - 可选字段：device_id、duration（整数秒）、recorded_at（RFC3339）
- *   - 鉴权走 middleware.Auth，只认用户级 JWT（见下方说明）
+ *   - 鉴权见下方说明
  * 成功返回 {"session_id": "...", "status": "pending"}
  *
  * 鉴权现状
  * --------
- * 后端 devices 表有 device_token_hash，/devices/bind 也会下发 device_token，
- * 但**没有任何中间件消费它** —— 固件目前没有合法的设备级鉴权路径。
- * 因此这里把请求头做成 "Authorization: <scheme> <token>" 两段可配，
- * 等后端补上设备鉴权后只改 config.json 即可，无需重新编译。
+ * 后端已补上设备级鉴权（middleware.DeviceAuth，消费 devices.device_token_hash）。
+ * 设备走 POST /api/v1/device/audio/upload，请求头 "Authorization: Device <device_token>"，
+ * 正好落在这里预留的 "<scheme> <token>" 两段可配设计上 —— 只改 config.json，无需重新编译。
+ * 设备态上传时后端以 token 反解出的设备为准，表单里的 device_id 会被忽略。
+ *
+ * 尚未实现（固件侧）
+ * ------------------
+ * device_token 目前仍需人工填进 config.json。后端已提供免手抄的自助配对：
+ *   POST /api/v1/device/claim  {device_id, bind_code, name} -> {device, device_token}
+ * bind_code 是用户在 App 上生成的 6 位数字码（10 分钟、一次性）。
+ * 拿到 token 后用 pulse_config 的 NVS 接口落盘即可。
+ * 另有 POST /api/v1/device/heartbeat（响应捎带待执行指令与 server_time）
+ * 与 POST /api/v1/device/commands/<id>/ack，固件均尚未接入。
  *
  * 为什么必须流式上传
  * ------------------

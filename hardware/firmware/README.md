@@ -28,7 +28,7 @@
 └────────────────────────────────────────────────────────────┘
          │ HTTP multipart  │ SNTP
          ▼                 ▼
-   POST /api/v1/audio/upload
+   POST /api/v1/device/audio/upload
 ```
 
 ## 模块与测试（每个模块一个独立 env）
@@ -66,7 +66,7 @@ pio run -e m5_audio -t upload -t monitor
 
 | 脚本 | 用途 |
 |---|---|
-| `fake_server.py` | 模拟后端 `/audio/upload`，校验逻辑与真后端 audio.go 一致 |
+| `fake_server.py` | 模拟后端 `/device/audio/upload`，校验逻辑与真后端 audio.go 一致 |
 | `selftest_fake_server.py` | 验证假后端本身的判定正确性 |
 | `wav_check.py` | 音频质量分析（DC 偏移/削波/SNR），配合 M5 |
 | `soak_test.py` | 断网长跑完整性分析（查重复/漏传/乱序） |
@@ -75,18 +75,28 @@ pio run -e m5_audio -t upload -t monitor
 
 ## 与后端的契约（读后端代码得出）
 
-- `POST /api/v1/audio/upload`，multipart，文件字段名 **`file`**
+- `POST /api/v1/device/audio/upload`，multipart，文件字段名 **`file`**
 - 扩展名 `.wav/.mp3/.m4a`，且须与文件头魔数一致（`RIFF/WAVE`）
 - 可选字段：`device_id`、`duration`（秒）、`recorded_at`（RFC3339）
 - 采样参数被后端 `stt.go` 写死：**16kHz / 16bit / mono**
-- 鉴权：后端目前只认用户级 JWT（`middleware.Auth`），设备级 `device_token`
-  尚无中间件消费。固件请求头 `Authorization: <scheme> <token>` 两段可配，
-  后端补齐设备鉴权后改 `config.json` 即可，无需重编译。
+- 鉴权：后端已有设备级中间件 `middleware.DeviceAuth`，消费 `devices.device_token_hash`。
+  固件请求头填 `Authorization: Device <device_token>`，改 `config.json` 即可，无需重编译
+  （`auth_scheme` = `Device`，`auth_token` = 设备 token）。
+- 设备态上传时后端以 token 反解出的设备为准，表单里的 `device_id` 会被忽略。
+- **设备配对**（`src/net/claim`）：`POST /api/v1/device/claim` 已实现，
+  `{device_id, bind_code, name}` → `{device, device_token}`。用户在 App 生成 6 位数字码
+  （10 分钟、一次性），固件调用 `pulse_claim_request()` 换取 token，自动写入 NVS。
+  详见 `src/net/claim/README.md`。**需集成到 UI 或配网流程**，当前仅提供 API。
+- 其余设备接口（固件**尚未接入**）：
+  - `POST /api/v1/device/heartbeat` — 响应捎带待执行指令与 `server_time`。
+  - `POST /api/v1/device/commands/<id>/ack` — 回执 `done` / `failed`。
+- 传输仍是明文 HTTP（`verify_tls: false`），按产品决策暂不上 TLS。
 
 ## 关键设计决策
 
-1. **纯 HTTP 不引 MQTT**：后端零 MQTT 实现，音频走现有 upload 接口，
-   控制面暂由心跳响应捎带（后端设备鉴权未完成前，此路径也未完全打通）。
+1. **纯 HTTP 不引 MQTT**：后端零 MQTT 实现，音频走 upload 接口，
+   控制面由心跳响应捎带（后端已打通；指令 pending-until-ack，
+   `start/stop_recording` 幂等，10 分钟未取走即过期）。
 2. **三级功耗**（Active/Idle/DeepSleep），默认不自动深睡，避免静音期"聋掉"。
 3. **存储可降级**：SD 4-bit → 1-bit → PSRAM 环形缓冲，GPIO45/46 有问题时也能联调。
 4. **流式上传**：960KB 的段绝不整块进内存，用自定义 Stream 边读边发。

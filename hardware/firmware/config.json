@@ -10,11 +10,11 @@
   },
 
   "cloud": {
-    "_comment": "base_url 改成后端的地址。auth_scheme 现在填 Bearer + 用户 JWT；等后端补上设备鉴权后改成 Device + device_token 即可，固件无需重编译。",
+    "_comment": "base_url 改成后端的地址。auth_scheme=Device + auth_token=device_token（POST /api/v1/device/claim 用 device_id + App 生成的 6 位绑定码换取，只返回一次）。仍可临时填 Bearer + 用户 JWT 走 /api/v1/audio/upload 调试，但 JWT 1 小时过期。",
     "base_url": "http://192.168.1.100:8080",
-    "upload_path": "/api/v1/audio/upload",
+    "upload_path": "/api/v1/device/audio/upload",
     "device_id": "",
-    "auth_scheme": "Bearer",
+    "auth_scheme": "Device",
     "auth_token": "",
     "request_timeout_ms": 30000,
     "max_retry": 5,

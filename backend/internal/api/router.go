@@ -89,6 +89,23 @@ func NewRouter(cfg *config.Config, db *sql.DB) (*gin.Engine, *worker.AudioProces
 			authed.POST("/devices/:id/heartbeat", deviceHandler.Heartbeat)
 			authed.POST("/devices/:id/command", deviceHandler.Command)
 		}
+
+		// 设备态路由组。必须与 authed 分开：DeviceAuth 会写入与用户态相同的
+		// CtxUserID，一旦把设备接口并进 authed，设备 token 就能访问时间线、
+		// 账号导出乃至删号。这里只暴露设备真正需要的三个接口。
+		device := v1.Group("/device")
+		{
+			// 免鉴权：设备用一次性绑定码自助换取 device_token。
+			device.POST("/claim", deviceHandler.Claim)
+
+			authedDevice := device.Group("")
+			authedDevice.Use(middleware.DeviceAuth(deviceService))
+			{
+				authedDevice.POST("/audio/upload", audioHandler.Upload)
+				authedDevice.POST("/heartbeat", deviceHandler.DeviceHeartbeat)
+				authedDevice.POST("/commands/:id/ack", deviceHandler.AckCommand)
+			}
+		}
 	}
 
 	return r, processor

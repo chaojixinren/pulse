@@ -1,6 +1,8 @@
 package api
 
 import (
+	"time"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/chaojixinren/pulse/internal/service"
@@ -115,4 +117,82 @@ func (h *DeviceHandler) Command(c *gin.Context) {
 		return
 	}
 	response.OK(c, cmd)
+}
+
+type claimDeviceRequest struct {
+	DeviceID string `json:"device_id" binding:"required"`
+	Name     string `json:"name"`
+	BindCode string `json:"bind_code" binding:"required"`
+}
+
+// Claim 设备自助配对（免鉴权）：device_id + 一次性绑定码 → device_token。
+// 设备把返回的 token 写进 NVS 即可，无需人工把 token 抄进 TF 卡。
+//
+// 该端点不带任何鉴权，屏障只有绑定码本身（6 位数字 / 10 分钟 / 一次性），
+// 且按产品决策未加尝试次数限制。
+func (h *DeviceHandler) Claim(c *gin.Context) {
+	var req claimDeviceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, apperrors.NewBadRequest("参数错误: "+err.Error()))
+		return
+	}
+	device, token, err := h.svc.Claim(c.Request.Context(), req.DeviceID, req.Name, req.BindCode)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{"device": device, "device_token": token})
+}
+
+// DeviceHeartbeat 设备级心跳（Authorization: Device <token>）。
+// 设备身份由 token 反解，不需要在 URL 里带 id。
+// 响应捎带待执行指令与服务端时间，省掉一次独立请求。
+func (h *DeviceHandler) DeviceHeartbeat(c *gin.Context) {
+	deviceUUID := currentDeviceUUID(c)
+	if deviceUUID == "" {
+		fail(c, apperrors.ErrUnauthorized)
+		return
+	}
+	var req heartbeatRequest
+	// 心跳允许空 body：设备刚开机、PMU 还没出数时也应能报到。
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			fail(c, apperrors.NewBadRequest("参数错误: "+err.Error()))
+			return
+		}
+	}
+	device, commands, err := h.svc.DeviceHeartbeat(c.Request.Context(), deviceUUID, req.FirmwareVersion, req.BatteryLevel)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{
+		"device":   device,
+		"commands": commands,
+		// 设备 RTC 未校时时可直接用这个值兜底，省掉一次 NTP。
+		"server_time": time.Now().UTC().Format(time.RFC3339),
+	})
+}
+
+type ackCommandRequest struct {
+	Status string `json:"status" binding:"required"`
+}
+
+// AckCommand 设备回执指令执行结果（done / failed）。
+func (h *DeviceHandler) AckCommand(c *gin.Context) {
+	deviceUUID := currentDeviceUUID(c)
+	if deviceUUID == "" {
+		fail(c, apperrors.ErrUnauthorized)
+		return
+	}
+	var req ackCommandRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, apperrors.NewBadRequest("参数错误: "+err.Error()))
+		return
+	}
+	if err := h.svc.AckCommand(c.Request.Context(), deviceUUID, c.Param("id"), req.Status); err != nil {
+		fail(c, err)
+		return
+	}
+	response.OKMessage(c, "回执已记录")
 }
