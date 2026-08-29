@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/chaojixinren/pulse/internal/service"
+	apperrors "github.com/chaojixinren/pulse/pkg/errors"
 	"github.com/chaojixinren/pulse/pkg/response"
 )
 
@@ -32,4 +33,54 @@ func (h *AccountHandler) Delete(c *gin.Context) {
 		return
 	}
 	response.OKMessage(c, "账户已注销")
+}
+
+// GetAsr 返回当前用户的 ASR 配置（脱敏）。
+func (h *AccountHandler) GetAsr(c *gin.Context) {
+	view, err := h.svc.GetAsrSettings(c.Request.Context(), currentUserID(c))
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	response.OK(c, view)
+}
+
+// UpdateAsr 部分更新当前用户的 ASR 配置。
+func (h *AccountHandler) UpdateAsr(c *gin.Context) {
+	var req service.AsrSettingsInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, apperrors.NewBadRequest("参数错误: "+err.Error()))
+		return
+	}
+	view, err := h.svc.UpdateAsrSettings(c.Request.Context(), currentUserID(c), &req)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	response.OK(c, view)
+}
+
+// GetAi 返回当前用户的 AI 分析配置（脱敏）。
+func (h *AccountHandler) GetAi(c *gin.Context) {
+	view, err := h.svc.GetAiSettings(c.Request.Context(), currentUserID(c))
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	response.OK(c, view)
+}
+
+// UpdateAi 部分更新当前用户的 AI 分析配置。
+func (h *AccountHandler) UpdateAi(c *gin.Context) {
+	var req service.AiSettingsInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, apperrors.NewBadRequest("参数错误: "+err.Error()))
+		return
+	}
+	view, err := h.svc.UpdateAiSettings(c.Request.Context(), currentUserID(c), &req)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	response.OK(c, view)
 }

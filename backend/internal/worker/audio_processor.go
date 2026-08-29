@@ -19,17 +19,19 @@ type AudioProcessor struct {
 	stt           *service.SttService
 	identities    *repository.IdentityRepo
 	ai            *service.AIService
+	account       *service.AccountService
 	encryptionKey []byte
 	interval      time.Duration
 	batchSize     int
 }
 
-func NewAudioProcessor(sessions *repository.AudioSessionRepo, stt *service.SttService, identities *repository.IdentityRepo, ai *service.AIService, encryptionKey []byte) *AudioProcessor {
+func NewAudioProcessor(sessions *repository.AudioSessionRepo, stt *service.SttService, identities *repository.IdentityRepo, ai *service.AIService, account *service.AccountService, encryptionKey []byte) *AudioProcessor {
 	return &AudioProcessor{
 		sessions:      sessions,
 		stt:           stt,
 		identities:    identities,
 		ai:            ai,
+		account:       account,
 		encryptionKey: encryptionKey,
 		interval:      5 * time.Second,
 		batchSize:     5,
@@ -95,7 +97,7 @@ func (w *AudioProcessor) processOne(ctx context.Context, sess *model.AudioSessio
 		audio = decrypted
 	}
 
-	text, err := w.stt.Transcribe(ctx, audio, service.FilenameForMime(mime))
+	text, err := w.stt.TranscribeWithOverrides(ctx, audio, service.FilenameForMime(mime), w.sttOverrides(ctx, sess.UserID))
 	if err != nil {
 		log.Error("转写失败", zap.Error(err))
 		if uerr := w.sessions.UpdateStatus(ctx, sess.ID, model.StatusFailed, err.Error()); uerr != nil {
@@ -145,7 +147,7 @@ func (w *AudioProcessor) analyze(ctx context.Context, sess *model.AudioSession, 
 		}
 	}
 
-	result, err := w.ai.AnalyzeTranscript(ctx, text, identities)
+	result, err := w.ai.AnalyzeTranscriptWithOverrides(ctx, text, identities, w.aiOverrides(ctx, sess.UserID))
 	if err != nil {
 		logger.Log.Warn("AI 分析失败", zap.String("session_id", sess.ID), zap.Error(err))
 		return
@@ -174,4 +176,30 @@ func (w *AudioProcessor) analyze(ctx context.Context, sess *model.AudioSession, 
 		zap.String("identity_id", idStr),
 		zap.Float64("confidence", confidence),
 	)
+}
+
+// sttOverrides 读取用户级 ASR 覆盖项；加载失败回退全局默认（返回 nil）。
+func (w *AudioProcessor) sttOverrides(ctx context.Context, userID string) *service.SttOverrides {
+	if w.account == nil {
+		return nil
+	}
+	o, err := w.account.SttOverridesForUser(ctx, userID)
+	if err != nil {
+		logger.Log.Warn("加载用户 ASR 配置失败，回退全局默认", zap.String("user_id", userID), zap.Error(err))
+		return nil
+	}
+	return o
+}
+
+// aiOverrides 读取用户级 AI 分析覆盖项；加载失败回退全局默认（返回 nil）。
+func (w *AudioProcessor) aiOverrides(ctx context.Context, userID string) *service.AiOverrides {
+	if w.account == nil {
+		return nil
+	}
+	o, err := w.account.AiOverridesForUser(ctx, userID)
+	if err != nil {
+		logger.Log.Warn("加载用户 AI 配置失败，回退全局默认", zap.String("user_id", userID), zap.Error(err))
+		return nil
+	}
+	return o
 }

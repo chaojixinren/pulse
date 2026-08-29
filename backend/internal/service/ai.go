@@ -28,6 +28,10 @@ const (
 type AIService struct {
 	model     adkmodel.LLM
 	threshold float64
+	// 以下保存全局默认，供 per-user 覆盖时回退。
+	apiKey    string
+	baseURL   string
+	modelName string
 }
 
 // NewAIService 根据配置构建 AI 分析服务。
@@ -52,7 +56,11 @@ func NewAIService(cfg *config.Config) *AIService {
 	if threshold <= 0 {
 		threshold = defaultAIConfidenceThreshold
 	}
-	return newAIService(llm, threshold)
+	s := newAIService(llm, threshold)
+	s.apiKey = cfg.AIAPIKey
+	s.baseURL = baseURL
+	s.modelName = modelName
+	return s
 }
 
 // NewAIServiceWithModel 注入自定义 model.LLM（测试/依赖注入用）。
@@ -71,18 +79,64 @@ func newAIService(llm adkmodel.LLM, threshold float64) *AIService {
 	}
 }
 
-// AnalyzeTranscript 转写文本 + 用户身份列表 → 分析结果。
+// AiOverrides 是单次 AI 分析的 per-user 覆盖项；空值字段回退全局默认。
+type AiOverrides struct {
+	APIKey    string
+	BaseURL   string
+	Model     string
+	Threshold float64
+}
+
+// AnalyzeTranscript 转写文本 + 用户身份列表 → 分析结果（全局默认配置）。
 // 两阶段：先身份识别（候选身份作为标签），再信息提取。
 func (s *AIService) AnalyzeTranscript(ctx context.Context, transcript string, identities []model.Identity) (*model.AnalysisResult, error) {
+	return s.AnalyzeTranscriptWithOverrides(ctx, transcript, identities, nil)
+}
+
+// AnalyzeTranscriptWithOverrides 在全局默认之上应用 per-user 覆盖后执行分析。
+// 仅当用户自定义了 APIKey / BaseURL / Model 任一字段时才动态构建临时模型，否则复用全局实例。
+func (s *AIService) AnalyzeTranscriptWithOverrides(ctx context.Context, transcript string, identities []model.Identity, o *AiOverrides) (*model.AnalysisResult, error) {
 	transcript = strings.TrimSpace(transcript)
 	if transcript == "" {
 		return nil, apperrors.NewBadRequest("转写文本为空，无法分析")
 	}
 
-	identityID, confidence := s.recognizeIdentity(ctx, transcript, identities)
-	extracted := s.extract(ctx, transcript)
+	llm := s.model
+	threshold := s.threshold
+	if o != nil {
+		if o.APIKey != "" || o.BaseURL != "" || o.Model != "" {
+			var err error
+			llm, err = s.buildLLM(o.APIKey, o.BaseURL, o.Model)
+			if err != nil {
+				return nil, apperrors.WrapInternal(err)
+			}
+		}
+		if o.Threshold > 0 {
+			threshold = o.Threshold
+		}
+	}
 
-	return buildAnalysisResult(identityID, confidence, s.threshold, extracted), nil
+	identityID, confidence := s.recognizeIdentity(ctx, llm, transcript, identities)
+	extracted := s.extract(ctx, llm, transcript)
+
+	return buildAnalysisResult(identityID, confidence, threshold, extracted), nil
+}
+
+// buildLLM 用覆盖项构建 OpenAI 兼容模型；空字段回退全局默认。
+func (s *AIService) buildLLM(apiKey, baseURL, modelName string) (adkmodel.LLM, error) {
+	if apiKey == "" {
+		apiKey = s.apiKey
+	}
+	if baseURL == "" {
+		baseURL = s.baseURL
+	}
+	if modelName == "" {
+		modelName = s.modelName
+	}
+	return openaimodel.NewModel(context.Background(), modelName, &openaimodel.ClientConfig{
+		APIKey:  apiKey,
+		BaseURL: baseURL,
+	})
 }
 
 // buildAnalysisResult 依据识别结果、置信度与阈值组装最终结果。
@@ -102,8 +156,8 @@ func buildAnalysisResult(identityID string, confidence float64, threshold float6
 	return result
 }
 
-// call 通过 adk-go 的 model.LLM 执行一次生成，返回模型输出的文本。
-func (s *AIService) call(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+// call 通过指定的 model.LLM 执行一次生成，返回模型输出的文本。
+func (s *AIService) call(ctx context.Context, llm adkmodel.LLM, systemPrompt, userPrompt string) (string, error) {
 	req := &adkmodel.LLMRequest{
 		Contents: []*genai.Content{
 			{Role: "user", Parts: []*genai.Part{{Text: userPrompt}}},
@@ -114,7 +168,7 @@ func (s *AIService) call(ctx context.Context, systemPrompt, userPrompt string) (
 	}
 
 	var out strings.Builder
-	for resp, err := range s.model.GenerateContent(ctx, req, false) {
+	for resp, err := range llm.GenerateContent(ctx, req, false) {
 		if err != nil {
 			return "", err
 		}
@@ -138,10 +192,10 @@ type identityWire struct {
 	Confidence float64 `json:"confidence"`
 }
 
-func (s *AIService) recognizeIdentity(ctx context.Context, transcript string, identities []model.Identity) (string, float64) {
+func (s *AIService) recognizeIdentity(ctx context.Context, llm adkmodel.LLM, transcript string, identities []model.Identity) (string, float64) {
 	userPrompt := fmt.Sprintf(prompt.IdentityUserTemplate, formatIdentities(identities), transcript)
 
-	text, err := s.call(ctx, prompt.IdentitySystemPrompt, userPrompt)
+	text, err := s.call(ctx, llm, prompt.IdentitySystemPrompt, userPrompt)
 	if err != nil {
 		return "", 0
 	}
@@ -149,7 +203,7 @@ func (s *AIService) recognizeIdentity(ctx context.Context, transcript string, id
 	var wire identityWire
 	if err := json.Unmarshal([]byte(stripCodeFences(text)), &wire); err != nil {
 		// JSON 解析失败，重试一次
-		retryText, retryErr := s.call(ctx, prompt.IdentitySystemPrompt, userPrompt+prompt.IdentityRetrySuffix)
+		retryText, retryErr := s.call(ctx, llm, prompt.IdentitySystemPrompt, userPrompt+prompt.IdentityRetrySuffix)
 		if retryErr != nil {
 			return "", 0
 		}
@@ -189,10 +243,10 @@ type extractionWire struct {
 	Notes       []string         `json:"notes"`
 }
 
-func (s *AIService) extract(ctx context.Context, transcript string) model.ExtractedData {
+func (s *AIService) extract(ctx context.Context, llm adkmodel.LLM, transcript string) model.ExtractedData {
 	userPrompt := fmt.Sprintf(prompt.ExtractionUserTemplate, transcript)
 
-	text, err := s.call(ctx, prompt.ExtractionSystemPrompt, userPrompt)
+	text, err := s.call(ctx, llm, prompt.ExtractionSystemPrompt, userPrompt)
 	if err != nil {
 		return emptyExtracted()
 	}
@@ -200,7 +254,7 @@ func (s *AIService) extract(ctx context.Context, transcript string) model.Extrac
 	var wire extractionWire
 	if err := json.Unmarshal([]byte(stripCodeFences(text)), &wire); err != nil {
 		// JSON 解析失败，重试一次
-		retryText, retryErr := s.call(ctx, prompt.ExtractionSystemPrompt, userPrompt+prompt.ExtractionRetrySuffix)
+		retryText, retryErr := s.call(ctx, llm, prompt.ExtractionSystemPrompt, userPrompt+prompt.ExtractionRetrySuffix)
 		if retryErr != nil {
 			return emptyExtracted()
 		}

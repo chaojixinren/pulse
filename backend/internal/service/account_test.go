@@ -27,6 +27,7 @@ func newAccountService(t *testing.T) (*AccountService, sqlmock.Sqlmock) {
 		repository.NewDeviceRepo(db),
 		repository.NewAudioSessionRepo(db),
 		repository.NewRefreshTokenRepo(db),
+		nil,
 	)
 	return svc, mock
 }

@@ -82,10 +82,47 @@ func FilenameForMime(mime string) string {
 	}
 }
 
+// SttOverrides 是单次转写的 per-user 覆盖项；空值字段回退全局默认。
+type SttOverrides struct {
+	APIKey    string
+	BaseURL   string
+	Model     string
+	Language  string
+	EnableITN *bool
+}
+
 // Transcribe 将音频字节提交到 StepFun Step Plan SSE 接口，返回转写文本。
 func (s *SttService) Transcribe(ctx context.Context, data []byte, filename string) (string, error) {
+	return s.TranscribeWithOverrides(ctx, data, filename, nil)
+}
+
+// TranscribeWithOverrides 在全局默认之上应用 per-user 覆盖后执行转写。
+func (s *SttService) TranscribeWithOverrides(ctx context.Context, data []byte, filename string, o *SttOverrides) (string, error) {
 	if len(data) == 0 {
 		return "", apperrors.NewBadRequest("音频数据为空")
+	}
+
+	apiKey := s.apiKey
+	baseURL := s.baseURL
+	model := s.model
+	language := "zh"
+	enableITN := true
+	if o != nil {
+		if o.APIKey != "" {
+			apiKey = o.APIKey
+		}
+		if o.BaseURL != "" {
+			baseURL = strings.TrimRight(o.BaseURL, "/")
+		}
+		if o.Model != "" {
+			model = o.Model
+		}
+		if o.Language != "" {
+			language = o.Language
+		}
+		if o.EnableITN != nil {
+			enableITN = *o.EnableITN
+		}
 	}
 
 	// Base64 编码音频数据
@@ -97,9 +134,9 @@ func (s *SttService) Transcribe(ctx context.Context, data []byte, filename strin
 			Data: encodedAudio,
 			Input: sseInput{
 				Transcription: sseTranscription{
-					Model:     s.model,
-					Language:  "zh",
-					EnableITN: true,
+					Model:     model,
+					Language:  language,
+					EnableITN: enableITN,
 				},
 				Format: sseFormat{
 					Type:    "pcm",
@@ -117,13 +154,13 @@ func (s *SttService) Transcribe(ctx context.Context, data []byte, filename strin
 		return "", apperrors.WrapInternal(err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.baseURL+"/audio/asr/sse", bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/audio/asr/sse", bytes.NewReader(bodyBytes))
 	if err != nil {
 		return "", apperrors.WrapInternal(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("Authorization", "Bearer "+s.apiKey)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 
 	resp, err := s.client.Do(req)
 	if err != nil {

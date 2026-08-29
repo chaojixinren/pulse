@@ -35,7 +35,7 @@ func NewRouter(cfg *config.Config, db *sql.DB) (*gin.Engine, *worker.AudioProces
 	reportService := service.NewReportService(sessionRepo, identityRepo)
 	aiService := service.NewAIService(cfg)
 	deviceService := service.NewDeviceService(deviceRepo)
-	accountService := service.NewAccountService(userRepo, identityRepo, deviceRepo, sessionRepo, tokenRepo)
+	accountService := service.NewAccountService(userRepo, identityRepo, deviceRepo, sessionRepo, tokenRepo, cfg.AudioEncryptionKey)
 
 	// handlers
 	healthHandler := NewHealthHandler(db)
@@ -48,7 +48,7 @@ func NewRouter(cfg *config.Config, db *sql.DB) (*gin.Engine, *worker.AudioProces
 	accountHandler := NewAccountHandler(accountService)
 
 	// worker
-	processor := worker.NewAudioProcessor(sessionRepo, sttService, identityRepo, aiService, cfg.AudioEncryptionKey)
+	processor := worker.NewAudioProcessor(sessionRepo, sttService, identityRepo, aiService, accountService, cfg.AudioEncryptionKey)
 
 	r.GET("/health", healthHandler.Check)
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
@@ -80,6 +80,10 @@ func NewRouter(cfg *config.Config, db *sql.DB) (*gin.Engine, *worker.AudioProces
 			authed.GET("/reports/stats", reportHandler.Stats)
 			authed.GET("/account/export", accountHandler.Export)
 			authed.DELETE("/account", accountHandler.Delete)
+			authed.GET("/account/asr", accountHandler.GetAsr)
+			authed.PUT("/account/asr", accountHandler.UpdateAsr)
+			authed.GET("/account/ai", accountHandler.GetAi)
+			authed.PUT("/account/ai", accountHandler.UpdateAi)
 
 			authed.GET("/devices", deviceHandler.List)
 			authed.POST("/devices", deviceHandler.CreateDevice)
