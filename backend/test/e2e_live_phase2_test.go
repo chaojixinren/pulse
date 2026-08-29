@@ -48,36 +48,30 @@ func TestLiveE2EPhase2Devices(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode, "login: %v", login)
 	c.token = login["data"].(map[string]interface{})["access_token"].(string)
 
-	// 1) 生成绑定码
-	resp, bc := c.json(t, http.MethodPost, "/api/v1/devices/bind-code", nil)
-	require.Equal(t, http.StatusOK, resp.StatusCode, "bind-code: %v", bc)
-	bindCode := bc["data"].(map[string]interface{})["code"].(string)
-	require.Len(t, bindCode, 6)
-
-	// 2) 绑定设备
+	// 1) 创建设备（App 领养，一次性返回 device_token 供手抄到 config.json）
 	deviceID := fmt.Sprintf("live-dev-%d", time.Now().UnixNano())
-	resp, bd := c.json(t, http.MethodPost, "/api/v1/devices/bind", map[string]string{"device_id": deviceID, "name": "手表", "bind_code": bindCode})
-	require.Equal(t, http.StatusOK, resp.StatusCode, "bind: %v", bd)
-	bindData := bd["data"].(map[string]interface{})
-	device := bindData["device"].(map[string]interface{})
+	resp, cd := c.json(t, http.MethodPost, "/api/v1/devices", map[string]string{"device_id": deviceID, "name": "手表"})
+	require.Equal(t, http.StatusOK, resp.StatusCode, "create device: %v", cd)
+	cdData := cd["data"].(map[string]interface{})
+	device := cdData["device"].(map[string]interface{})
 	devID := device["id"].(string)
-	assert.NotEmpty(t, bindData["device_token"])
 	require.NotEmpty(t, devID)
+	assert.NotEmpty(t, cdData["device_token"])
 
-	// 3) 心跳
+	// 4) 心跳
 	resp, _ = c.json(t, http.MethodPost, "/api/v1/devices/"+devID+"/heartbeat", map[string]int{"battery_level": 80})
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	// 4) 指令下发
+	// 5) 指令下发
 	resp, _ = c.json(t, http.MethodPost, "/api/v1/devices/"+devID+"/command", map[string]string{"command": "start_recording"})
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	// 5) 设备列表
+	// 6) 设备列表
 	resp, dl := c.json(t, http.MethodGet, "/api/v1/devices", nil)
 	require.Equal(t, http.StatusOK, resp.StatusCode, "devices: %v", dl)
 	assert.GreaterOrEqual(t, len(dl["data"].([]interface{})), 1)
 
-	// 6) 解绑
+	// 7) 解绑
 	resp, _ = c.json(t, http.MethodDelete, "/api/v1/devices/"+devID, nil)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 }

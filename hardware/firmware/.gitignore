@@ -1,0 +1,9 @@
+.claude/
+.pio/
+.vscode/
+lib/README
+include/README
+pc_sim/
+test/
+src/tests/
+tools/

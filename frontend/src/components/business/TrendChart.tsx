@@ -23,7 +23,7 @@ export function TrendChart({
   emptyTitle = '暂无趋势数据',
 }: TrendChartProps) {
   if (points.length === 0) {
-    return <Empty icon="📈" title={emptyTitle} />;
+    return <Empty title={emptyTitle} />;
   }
 
   const values = points.map((p) => p[metric]);

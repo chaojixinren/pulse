@@ -42,3 +42,46 @@ test('注销账户需邮箱二次确认，注销后跳转注册页', async ({ pa
   await dialog.getByRole('button', { name: '确认注销' }).click();
   await page.waitForURL('**/auth/register');
 });
+
+test('账户设置页渲染 ASR/AI 配置并保存', async ({ page }) => {
+  await goToAccount(page);
+
+  // 两个配置区块都成功加载（说明 GET /account/asr 与 /account/ai 正常返回）
+  await expect(page.getByRole('heading', { name: '语音转写（ASR）' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'AI 分析' })).toBeVisible();
+
+  // 保存 ASR 配置：填写模型后提交
+  const asrForm = page.getByTestId('asr-form');
+  await asrForm.getByLabel('模型 Model').fill('step-asr');
+  await asrForm.getByRole('button', { name: '保存 ASR 配置' }).click();
+  await expect(page.getByText('ASR 配置已保存')).toBeVisible();
+
+  // 保存 AI 配置：填写模型后提交
+  const aiForm = page.getByTestId('ai-form');
+  await aiForm.getByLabel('模型 Model').fill('gpt-4o-mini');
+  await aiForm.getByRole('button', { name: '保存 AI 配置' }).click();
+  await expect(page.getByText('AI 配置已保存')).toBeVisible();
+});
+
+test('ASR 密钥保存后脱敏回显并可清除', async ({ page }) => {
+  await goToAccount(page);
+  const asrForm = page.getByTestId('asr-form');
+
+  // 初始未配置密钥，不显示清除按钮
+  await expect(asrForm.getByRole('button', { name: '清除密钥' })).toHaveCount(0);
+
+  // 输入密钥并保存
+  await asrForm.getByLabel('API Key').fill('sk-12345678');
+  await asrForm.getByRole('button', { name: '保存 ASR 配置' }).click();
+  await expect(page.getByText('ASR 配置已保存')).toBeVisible();
+
+  // 掩码回显（输入框清空，占位符含尾部 4 位）且出现清除按钮
+  await expect(asrForm.getByLabel('API Key')).toHaveAttribute('placeholder', /已配置（\*\*\*\*5678）/);
+  const clearBtn = asrForm.getByRole('button', { name: '清除密钥' });
+  await expect(clearBtn).toBeVisible();
+
+  // 清除密钥后掩码与清除按钮一并消失
+  await clearBtn.click();
+  await expect(page.getByText('已清除密钥')).toBeVisible();
+  await expect(asrForm.getByRole('button', { name: '清除密钥' })).toHaveCount(0);
+});

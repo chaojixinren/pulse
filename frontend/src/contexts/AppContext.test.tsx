@@ -96,24 +96,24 @@ describe('AppContext', () => {
     expect(screen.getByTestId('sidebar')).toHaveTextContent('true');
   });
 
-  it('默认 themePreference 为 system', () => {
+  it('默认 themePreference 为 light', () => {
     render(
       <AppProvider>
         <Harness />
       </AppProvider>,
     );
-    expect(screen.getByTestId('preference')).toHaveTextContent('system');
+    expect(screen.getByTestId('preference')).toHaveTextContent('light');
   });
 
-  it('无偏好时跟随系统深色', () => {
+  it('无偏好时默认亮色，不跟随系统深色', () => {
     stubMatchMedia(true);
     render(
       <AppProvider>
         <Harness />
       </AppProvider>,
     );
-    expect(screen.getByTestId('theme')).toHaveTextContent('dark');
-    expect(screen.getByTestId('preference')).toHaveTextContent('system');
+    expect(screen.getByTestId('theme')).toHaveTextContent('light');
+    expect(screen.getByTestId('preference')).toHaveTextContent('light');
   });
 
   it('手动覆盖主题并持久化，可切回跟随系统', async () => {

@@ -26,7 +26,7 @@ function systemTheme(): Theme {
 function readPreference(): ThemePreference {
   const stored = localStorage.getItem(THEME_KEY);
   if (stored === 'light' || stored === 'dark' || stored === 'system') return stored;
-  return 'system';
+  return 'light';
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {

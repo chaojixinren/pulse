@@ -30,22 +30,15 @@ describe('deviceService', () => {
     vi.mocked(http.delete).mockReset();
   });
 
-  it('generateBindCode 调用 POST /devices/bind-code', async () => {
-    const code = { id: 'c1', user_id: 'u1', code: '123456', expires_at: '2024-01-01T00:10:00Z', created_at: '' };
-    vi.mocked(http.post).mockResolvedValue(code);
-    const result = await deviceService.generateBindCode();
-    expect(http.post).toHaveBeenCalledWith('/devices/bind-code');
-    expect(result).toEqual(code);
-  });
-
-  it('bind 调用 POST /devices/bind', async () => {
-    const res = { device, device_token: 'token' };
+  it('create 调用 POST /devices', async () => {
+    const res = { device, device_token: 'a'.repeat(64) };
     vi.mocked(http.post).mockResolvedValue(res);
-    await deviceService.bind({ device_id: 'hw-001', bind_code: '123456' });
-    expect(http.post).toHaveBeenCalledWith('/devices/bind', {
+    const result = await deviceService.create({ device_id: 'hw-001', name: '手表' });
+    expect(http.post).toHaveBeenCalledWith('/devices', {
       device_id: 'hw-001',
-      bind_code: '123456',
+      name: '手表',
     });
+    expect(result).toEqual(res);
   });
 
   it('list 调用 GET /devices', async () => {

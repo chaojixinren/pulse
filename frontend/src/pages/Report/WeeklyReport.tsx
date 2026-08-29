@@ -73,7 +73,7 @@ export function Component() {
           <Button onClick={() => load(week)}>重试</Button>
         </div>
       ) : !report || !hasData ? (
-        <Empty icon="📅" title="本周暂无数据" description="这一周还没有语音会话记录。" />
+        <Empty title="本周暂无数据" description="这一周还没有语音会话记录。" />
       ) : (
         <>
           <div className="summary-grid">
@@ -114,7 +114,6 @@ export function Component() {
             <div className="card">
               <ExtractedList
                 items={report.top_todos}
-                emptyIcon="✅"
                 emptyTitle="暂无待办"
                 checkable
               />

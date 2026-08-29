@@ -31,7 +31,7 @@ export function IdentityPie({
   emptyTitle = '暂无身份数据',
 }: IdentityPieProps) {
   if (data.length === 0) {
-    return <Empty icon="🍩" title={emptyTitle} />;
+    return <Empty title={emptyTitle} />;
   }
 
   const total = data.reduce((sum, d) => sum + d[metric], 0);

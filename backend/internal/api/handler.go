@@ -34,3 +34,23 @@ func parseIntDefault(s string, def int) int {
 	}
 	return n
 }
+
+// currentDeviceUUID 读取设备鉴权中间件写入的 devices.id，用户态请求下为空串。
+func currentDeviceUUID(c *gin.Context) string {
+	v, exists := c.Get(middleware.CtxDeviceUUID)
+	if !exists {
+		return ""
+	}
+	id, _ := v.(string)
+	return id
+}
+
+// currentDeviceBizID 读取设备鉴权中间件写入的 devices.device_id（硬件标识），用户态请求下为空串。
+func currentDeviceBizID(c *gin.Context) string {
+	v, exists := c.Get(middleware.CtxDeviceBizID)
+	if !exists {
+		return ""
+	}
+	id, _ := v.(string)
+	return id
+}

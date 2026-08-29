@@ -127,7 +127,21 @@ const statsTrend = Array.from({ length: 30 }, (_, i) => {
 export async function mockApi(page: Page, options: MockOptions = {}): Promise<void> {
   let identities = initialIdentities.map((i) => ({ ...i }));
   let devices: Device[] = (options.devices ?? []).map((d) => ({ ...d }));
-  let bindCode: string | null = null;
+  let asrSettings = {
+    base_url: '',
+    model: '',
+    language: 'zh',
+    enable_itn: true,
+    has_api_key: false,
+    api_key_masked: '',
+  };
+  let aiSettings = {
+    base_url: '',
+    model: '',
+    confidence_threshold: 0.6,
+    has_api_key: false,
+    api_key_masked: '',
+  };
 
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
@@ -268,6 +282,44 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<vo
     }
 
     // ---- 账户管理 ----
+    // 模拟后端的掩码逻辑：api_key 非空即视为已配置，回显尾部 4 位。
+    const applyKey = (key: unknown) => {
+      const k = String(key ?? '');
+      return {
+        has_api_key: k.length > 0,
+        api_key_masked: k.length > 4 ? '****' + k.slice(-4) : k.length > 0 ? '****' : '',
+      };
+    };
+    if (method === 'GET' && path === '/account/asr') {
+      return respond(asrSettings);
+    }
+    if (method === 'PUT' && path === '/account/asr') {
+      const b = body();
+      asrSettings = {
+        ...asrSettings,
+        base_url: b.base_url !== undefined ? String(b.base_url) : asrSettings.base_url,
+        model: b.model !== undefined ? String(b.model) : asrSettings.model,
+        language: b.language !== undefined ? String(b.language) : asrSettings.language,
+        enable_itn: b.enable_itn !== undefined ? Boolean(b.enable_itn) : asrSettings.enable_itn,
+        ...(b.api_key !== undefined ? applyKey(b.api_key) : {}),
+      };
+      return respond(asrSettings);
+    }
+    if (method === 'GET' && path === '/account/ai') {
+      return respond(aiSettings);
+    }
+    if (method === 'PUT' && path === '/account/ai') {
+      const b = body();
+      aiSettings = {
+        ...aiSettings,
+        base_url: b.base_url !== undefined ? String(b.base_url) : aiSettings.base_url,
+        model: b.model !== undefined ? String(b.model) : aiSettings.model,
+        confidence_threshold:
+          b.confidence_threshold !== undefined ? Number(b.confidence_threshold) : aiSettings.confidence_threshold,
+        ...(b.api_key !== undefined ? applyKey(b.api_key) : {}),
+      };
+      return respond(aiSettings);
+    }
     if (method === 'GET' && path === '/account/export') {
       return respond({
         user: USER,
@@ -281,25 +333,20 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<vo
     }
 
     // ---- 设备管理 ----
-    if (method === 'POST' && path === '/devices/bind-code') {
-      bindCode = 'BINDCODE1';
-      return respond({
-        id: 'bc1',
-        user_id: 'u1',
-        code: bindCode,
-        expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-        created_at: new Date().toISOString(),
-      });
-    }
-    if (method === 'POST' && path === '/devices/bind') {
+    if (method === 'POST' && path === '/devices') {
       const b = body();
-      if (bindCode && String(b.bind_code) !== bindCode) {
-        return respond(undefined, 400, '绑定码无效或已过期');
+      const deviceId = String(b.device_id ?? '');
+      // 模拟后端校验：device_id 必填；taken 用于模拟「已被其他用户绑定」。
+      if (!deviceId) {
+        return respond(undefined, 400, 'device_id 和 user_id 不能为空');
+      }
+      if (deviceId === 'taken') {
+        return respond(undefined, 400, '该设备已被其他用户绑定');
       }
       const device: Device = {
         id: `d-${Date.now()}`,
         user_id: 'u1',
-        device_id: String(b.device_id ?? ''),
+        device_id: deviceId,
         name: String(b.name || '我的设备'),
         device_type: 'pulse-mic',
         firmware_version: '1.0.0',
@@ -310,8 +357,7 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<vo
         updated_at: '',
       };
       devices.push(device);
-      bindCode = null;
-      return respond({ device, device_token: `tok-${device.id}` });
+      return respond({ device, device_token: '0123456789abcdef'.repeat(4) });
     }
     if (method === 'GET' && path === '/devices') {
       return respond(devices);

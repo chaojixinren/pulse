@@ -1,5 +1,9 @@
 # Pulse · 拾笺
 
+<p align="center">
+  <img src="banner.svg" alt="Pulse 拾笺" width="100%" />
+</p>
+
 ![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
@@ -231,6 +235,11 @@
 ```bash
 git clone https://github.com/chaojixinren/pulse.git
 cd pulse
+
+# 1) 准备环境变量（复制后填写生产密钥）
+cp .env.example .env
+
+# 2) 构建并启动（依次 mysql → migrate → backend → frontend）
 docker compose up -d --build
 ```
 
@@ -241,6 +250,13 @@ docker compose up -d --build
 - ✅ 后端 API 服务（Go）
 - ✅ 前端 Web 应用（React）
 - ✅ 自动数据库迁移
+
+> **部署到服务器**：把仓库 clone 到服务器后执行上述两步即可（Dockerfile 为多阶段构建，服务器无需预装 Go / Node）。`.env` 中**至少**要改这些生产项：
+> - `JWT_SECRET`、`MYSQL_ROOT_PASSWORD`、`MYSQL_PASSWORD` —— 默认是开发弱口令，务必替换
+> - `STEPFUN_API_KEY`、`AI_API_KEY` —— 不填则语音转写与 AI 分析不可用
+> - `AUDIO_ENCRYPTION_KEY` —— 生产建议配置（生成：`openssl rand -base64 32`）
+>
+> 注意：`docker compose` 读取的是**仓库根目录**的 `.env`（不是 `backend/.env`，后者仅用于 `go run` 本地开发）。
 
 ### 🛠️ 本地开发环境
 

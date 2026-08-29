@@ -56,3 +56,11 @@ func (r *UserRepo) SoftDelete(ctx context.Context, id string) error {
 		`UPDATE users SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`, now, now, id)
 	return err
 }
+
+// UpdateSettings 覆盖写入用户 settings JSON。
+func (r *UserRepo) UpdateSettings(ctx context.Context, id, settings string) error {
+	now := time.Now().UTC()
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE users SET settings = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`, settings, now, id)
+	return err
+}

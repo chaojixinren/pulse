@@ -12,20 +12,6 @@ export interface Device {
   updated_at: string;
 }
 
-export interface DeviceBindCode {
-  id: string;
-  user_id: string;
-  code: string;
-  expires_at: string;
-  used_at?: string;
-  created_at: string;
-}
-
-export interface BindDeviceResult {
-  device: Device;
-  device_token: string; // 一次性返回，需提示用户妥善保存
-}
-
 export interface DeviceCommand {
   id: string;
   device_id: string;
@@ -36,8 +22,13 @@ export interface DeviceCommand {
   updated_at: string;
 }
 
-export interface BindDeviceInput {
-  device_id: string;
+// App 创建/绑定设备，一次性返回 device_token 供手抄到硬件 config.json。
+export interface CreateDeviceInput {
+  device_id: string; // 硬件侧唯一标识，需与 config.json 中 cloud.device_id 一致
   name?: string;
-  bind_code: string;
+}
+
+export interface CreateDeviceResult {
+  device: Device;
+  device_token: string; // 一次性明文 token，仅此响应返回，服务端只存 hash
 }

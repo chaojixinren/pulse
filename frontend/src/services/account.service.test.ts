@@ -14,6 +14,7 @@ vi.mock('./api', () => ({
 describe('accountService', () => {
   beforeEach(() => {
     vi.mocked(http.get).mockReset();
+    vi.mocked(http.put).mockReset();
     vi.mocked(http.delete).mockReset();
   });
 
@@ -29,5 +30,35 @@ describe('accountService', () => {
     vi.mocked(http.delete).mockResolvedValue(undefined);
     await accountService.delete();
     expect(http.delete).toHaveBeenCalledWith('/account');
+  });
+
+  it('getAsr 调用 GET /account/asr', async () => {
+    const payload = { base_url: '', model: '', language: 'zh', enable_itn: true, has_api_key: false, api_key_masked: '' };
+    vi.mocked(http.get).mockResolvedValue(payload);
+    const result = await accountService.getAsr();
+    expect(http.get).toHaveBeenCalledWith('/account/asr');
+    expect(result).toEqual(payload);
+  });
+
+  it('updateAsr 调用 PUT /account/asr', async () => {
+    const input = { model: 'step-asr' };
+    vi.mocked(http.put).mockResolvedValue(input);
+    await accountService.updateAsr(input);
+    expect(http.put).toHaveBeenCalledWith('/account/asr', input);
+  });
+
+  it('getAi 调用 GET /account/ai', async () => {
+    const payload = { base_url: '', model: '', confidence_threshold: 0.6, has_api_key: false, api_key_masked: '' };
+    vi.mocked(http.get).mockResolvedValue(payload);
+    const result = await accountService.getAi();
+    expect(http.get).toHaveBeenCalledWith('/account/ai');
+    expect(result).toEqual(payload);
+  });
+
+  it('updateAi 调用 PUT /account/ai', async () => {
+    const input = { confidence_threshold: 0.8 };
+    vi.mocked(http.put).mockResolvedValue(input);
+    await accountService.updateAi(input);
+    expect(http.put).toHaveBeenCalledWith('/account/ai', input);
   });
 });

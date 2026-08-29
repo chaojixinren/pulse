@@ -53,11 +53,18 @@ func (h *AudioHandler) Upload(c *gin.Context) {
 		recordedAt = t
 	}
 
+	// 设备态上传时以 token 反解出的设备为准，忽略表单里的 device_id，
+	// 否则任何持有凭据的一方都能把音频挂到任意 device_id 名下。
+	deviceID := c.PostForm("device_id")
+	if bizID := currentDeviceBizID(c); bizID != "" {
+		deviceID = bizID
+	}
+
 	session, err := h.svc.Upload(c.Request.Context(), userID, service.UploadInput{
 		Data:        data,
 		Filename:    fileHeader.Filename,
 		ContentType: fileHeader.Header.Get("Content-Type"),
-		DeviceID:    c.PostForm("device_id"),
+		DeviceID:    deviceID,
 		Duration:    parseIntDefault(c.PostForm("duration"), 0),
 		RecordedAt:  recordedAt,
 	})

@@ -14,7 +14,6 @@ import (
 )
 
 var deviceRepoCols = []string{"id", "user_id", "device_id", "name", "device_type", "firmware_version", "battery_level", "last_seen_at", "is_active", "device_token_hash", "created_at", "updated_at"}
-var bindCodeRepoCols = []string{"id", "user_id", "code", "expires_at", "used_at", "created_at"}
 
 func TestDeviceRepoCreate(t *testing.T) {
 	db, mock := newMockDB(t)
@@ -56,23 +55,6 @@ func TestDeviceRepoUpdateHeartbeat(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	require.NoError(t, repo.UpdateHeartbeat(context.Background(), "d1", "u1", &firmware, &battery))
-	assert.NoError(t, mock.ExpectationsWereMet())
-}
-
-func TestDeviceRepoCreateBindCodeAndMarkUsed(t *testing.T) {
-	db, mock := newMockDB(t)
-	repo := NewDeviceRepo(db)
-	now := time.Now().UTC()
-
-	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO device_bind_codes")).
-		WithArgs("c1", "u1", "123456", now).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-	require.NoError(t, repo.CreateBindCode(context.Background(), &model.DeviceBindCode{ID: "c1", UserID: "u1", Code: "123456", ExpiresAt: now}))
-
-	mock.ExpectExec(regexp.QuoteMeta("UPDATE device_bind_codes SET used_at")).
-		WithArgs(sqlmock.AnyArg(), "123456").
-		WillReturnResult(sqlmock.NewResult(0, 1))
-	require.NoError(t, repo.MarkBindCodeUsed(context.Background(), "123456"))
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 

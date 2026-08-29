@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/rand"
 	"strings"
 	"time"
 
@@ -13,7 +12,6 @@ import (
 )
 
 const (
-	bindCodeTTL       = 10 * time.Minute
 	defaultDeviceType = "wearable"
 	defaultDeviceName = "我的设备"
 )
@@ -30,83 +28,6 @@ type DeviceService struct {
 
 func NewDeviceService(repo *repository.DeviceRepo) *DeviceService {
 	return &DeviceService{repo: repo}
-}
-
-// GenerateBindCode 生成一次性绑定码（10 分钟内有效），供前端展示、硬件首次连接时使用。
-func (s *DeviceService) GenerateBindCode(ctx context.Context, userID string) (*model.DeviceBindCode, error) {
-	code, err := randomBindCode(6)
-	if err != nil {
-		return nil, apperrors.WrapInternal(err)
-	}
-	c := &model.DeviceBindCode{
-		ID:        utils.NewUUID(),
-		UserID:    userID,
-		Code:      code,
-		ExpiresAt: time.Now().UTC().Add(bindCodeTTL),
-	}
-	if err := s.repo.CreateBindCode(ctx, c); err != nil {
-		return nil, apperrors.WrapInternal(err)
-	}
-	return c, nil
-}
-
-// Bind 用户用 device_id + 一次性绑定码绑定设备，返回设备与设备级 token（只返回一次）。
-func (s *DeviceService) Bind(ctx context.Context, userID, deviceID, name, bindCode string) (*model.Device, string, error) {
-	deviceID = strings.TrimSpace(deviceID)
-	bindCode = strings.TrimSpace(bindCode)
-	name = strings.TrimSpace(name)
-
-	if deviceID == "" {
-		return nil, "", apperrors.NewBadRequest("设备标识不能为空")
-	}
-	if bindCode == "" {
-		return nil, "", apperrors.NewBadRequest("绑定码不能为空")
-	}
-
-	code, err := s.repo.GetBindCodeByCode(ctx, bindCode)
-	if err != nil {
-		return nil, "", apperrors.WrapInternal(err)
-	}
-	now := time.Now().UTC()
-	if code == nil || code.UsedAt != nil || code.ExpiresAt.Before(now) || code.UserID != userID {
-		return nil, "", apperrors.NewBadRequest("绑定码无效或已过期")
-	}
-
-	existing, err := s.repo.GetByDeviceID(ctx, deviceID)
-	if err != nil {
-		return nil, "", apperrors.WrapInternal(err)
-	}
-	if existing != nil {
-		return nil, "", apperrors.NewBadRequest("该设备已被绑定")
-	}
-
-	if name == "" {
-		name = defaultDeviceName
-	}
-
-	token, err := utils.RandomToken(32)
-	if err != nil {
-		return nil, "", apperrors.WrapInternal(err)
-	}
-
-	device := &model.Device{
-		ID:              utils.NewUUID(),
-		UserID:          userID,
-		DeviceID:        deviceID,
-		Name:            name,
-		DeviceType:      defaultDeviceType,
-		IsActive:        true,
-		DeviceTokenHash: utils.SHA256Hex(token),
-	}
-
-	// 先消费绑定码，再创建设备，保证一次性。
-	if err := s.repo.MarkBindCodeUsed(ctx, bindCode); err != nil {
-		return nil, "", apperrors.WrapInternal(err)
-	}
-	if err := s.repo.Create(ctx, device); err != nil {
-		return nil, "", apperrors.WrapInternal(err)
-	}
-	return device, token, nil
 }
 
 func (s *DeviceService) List(ctx context.Context, userID string) ([]model.Device, error) {
@@ -186,19 +107,141 @@ func (s *DeviceService) IssueCommand(ctx context.Context, userID, id, command st
 	return cmd, nil
 }
 
-// randomBindCode 生成 n 位数字绑定码。
-func randomBindCode(n int) (string, error) {
-	if n <= 0 {
-		n = 6
+// commandTTL 是指令的最长存活时间。start/stop_recording 是即时语义，
+// 设备离线太久之后再补发已经没有意义，过期比迟到更安全。
+const commandTTL = 10 * time.Minute
+
+// validAckStatus 是设备回执允许的终态。
+var validAckStatus = map[string]bool{
+	"done":   true,
+	"failed": true,
+}
+
+// AuthenticateDevice 按设备 token 反查设备，实现 middleware.DeviceAuthenticator。
+// 设备 token 不设过期：嵌入式设备没有交互式续期的条件，
+// 凭据吊销靠用户解绑（DELETE devices）或重新配对轮换 token。
+func (s *DeviceService) AuthenticateDevice(ctx context.Context, token string) (*model.Device, error) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return nil, apperrors.NewUnauthorized("设备凭据无效")
 	}
-	const digits = "0123456789"
-	buf := make([]byte, n)
-	if _, err := rand.Read(buf); err != nil {
-		return "", err
+	d, err := s.repo.GetByTokenHash(ctx, utils.SHA256Hex(token))
+	if err != nil {
+		return nil, apperrors.WrapInternal(err)
 	}
-	out := make([]byte, n)
-	for i, b := range buf {
-		out[i] = digits[int(b)%len(digits)]
+	if d == nil {
+		return nil, apperrors.NewUnauthorized("设备凭据无效或设备已解绑")
 	}
-	return string(out), nil
+	return d, nil
+}
+
+// DeviceHeartbeat 设备自报心跳，并在同一次响应里捎带待执行指令。
+//
+// 控制面走心跳返回而不是独立轮询端点：设备是间歇联网的，
+// 每多一次请求就多一次射频唤醒，直接影响续航。
+func (s *DeviceService) DeviceHeartbeat(ctx context.Context, deviceUUID string, firmware *string, battery *int) (*model.Device, []model.DeviceCommand, error) {
+	if battery != nil && (*battery < 0 || *battery > 100) {
+		return nil, nil, apperrors.NewBadRequest("电量应在 0-100 之间")
+	}
+	if err := s.repo.UpdateHeartbeatByID(ctx, deviceUUID, firmware, battery); err != nil {
+		return nil, nil, apperrors.WrapInternal(err)
+	}
+	// 先淘汰过期指令，再取待办，避免陈年指令在每次心跳里被反复投递。
+	if err := s.repo.ExpireStaleCommands(ctx, deviceUUID, time.Now().UTC().Add(-commandTTL)); err != nil {
+		return nil, nil, apperrors.WrapInternal(err)
+	}
+	cmds, err := s.repo.ListPendingCommands(ctx, deviceUUID)
+	if err != nil {
+		return nil, nil, apperrors.WrapInternal(err)
+	}
+	device, err := s.repo.GetByIDOnly(ctx, deviceUUID)
+	if err != nil {
+		return nil, nil, apperrors.WrapInternal(err)
+	}
+	if device == nil {
+		return nil, nil, apperrors.NewNotFound("设备不存在")
+	}
+	return device, cmds, nil
+}
+
+// AckCommand 设备回执指令执行结果。
+// 指令在收到回执前一直是 pending，因此会在后续心跳里重复下发；
+// start/stop_recording 本身幂等，重复执行无副作用，这样换取的是丢包时不丢指令。
+func (s *DeviceService) AckCommand(ctx context.Context, deviceUUID, commandID, status string) error {
+	status = strings.TrimSpace(status)
+	if !validAckStatus[status] {
+		return apperrors.NewBadRequest("回执状态无效，仅支持 done / failed")
+	}
+	ok, err := s.repo.AckCommand(ctx, commandID, deviceUUID, status)
+	if err != nil {
+		return apperrors.WrapInternal(err)
+	}
+	if !ok {
+		return apperrors.NewNotFound("指令不存在或已处理")
+	}
+	return nil
+}
+
+// ========== Device 创建/绑定（App 领养，一次性下发 token） ==========
+
+// CreateDevice App 用户创建设备绑定并生成设备令牌。
+//
+// 硬件回退为「纯上传 + token 手抄」后，配对退化为：用户在 App 填 device_id
+// 创建设备，后端一次性返回明文 device_token，用户抄录进硬件 config.json。
+// 同一 device_id 重复创建视为重新配对：轮换 token，旧 token 立即失效。
+func (s *DeviceService) CreateDevice(ctx context.Context, userID, deviceID, deviceName string) (*model.Device, string, error) {
+	userID = strings.TrimSpace(userID)
+	deviceID = strings.TrimSpace(deviceID)
+	deviceName = strings.TrimSpace(deviceName)
+	if userID == "" || deviceID == "" {
+		return nil, "", apperrors.NewBadRequest("user_id 和 device_id 不能为空")
+	}
+
+	existing, err := s.repo.GetByDeviceID(ctx, deviceID)
+	if err != nil {
+		return nil, "", apperrors.WrapInternal(err)
+	}
+
+	var device *model.Device
+	var deviceToken string
+
+	if existing != nil {
+		// 设备已存在，只允许原用户重新配对（轮换 token，旧 token 立即失效）。
+		if existing.UserID != userID {
+			return nil, "", apperrors.NewBadRequest("该设备已被其他用户绑定")
+		}
+		token, err := utils.RandomToken(32)
+		if err != nil {
+			return nil, "", apperrors.WrapInternal(err)
+		}
+		if err := s.repo.RotateToken(ctx, existing.ID, utils.SHA256Hex(token)); err != nil {
+			return nil, "", apperrors.WrapInternal(err)
+		}
+		device = existing
+		deviceToken = token
+	} else {
+		// 新设备，创建绑定。
+		token, err := utils.RandomToken(32)
+		if err != nil {
+			return nil, "", apperrors.WrapInternal(err)
+		}
+		if deviceName == "" {
+			deviceName = defaultDeviceName
+		}
+		device = &model.Device{
+			ID:              utils.NewUUID(),
+			UserID:          userID,
+			DeviceID:        deviceID,
+			Name:            deviceName,
+			DeviceType:      defaultDeviceType,
+			IsActive:        true,
+			DeviceTokenHash: utils.SHA256Hex(token),
+		}
+		if err := s.repo.Create(ctx, device); err != nil {
+			return nil, "", apperrors.WrapInternal(err)
+		}
+		deviceToken = token
+	}
+
+	return device, deviceToken, nil
 }

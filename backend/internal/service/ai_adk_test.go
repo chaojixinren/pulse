@@ -25,7 +25,7 @@ func TestCallBuildsLLMRequest(t *testing.T) {
 	}
 	svc := newAIService(m, 0.6)
 
-	text, err := svc.call(context.Background(), "系统提示", "用户输入")
+	text, err := svc.call(context.Background(), m, "系统提示", "用户输入")
 	require.NoError(t, err)
 	assert.Equal(t, "模型输出", text)
 
@@ -48,7 +48,7 @@ func TestCallEmptyContentReturnsError(t *testing.T) {
 		fn:   func(req *adkmodel.LLMRequest) (string, error) { return "", nil },
 	}
 	svc := newAIService(m, 0.6)
-	_, err := svc.call(context.Background(), "s", "u")
+	_, err := svc.call(context.Background(), m, "s", "u")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "无返回内容")
 }
@@ -61,7 +61,7 @@ func TestCallPropagatesModelError(t *testing.T) {
 		fn:   func(req *adkmodel.LLMRequest) (string, error) { return "", boom },
 	}
 	svc := newAIService(m, 0.6)
-	_, err := svc.call(context.Background(), "s", "u")
+	_, err := svc.call(context.Background(), m, "s", "u")
 	require.ErrorIs(t, err, boom)
 }
 

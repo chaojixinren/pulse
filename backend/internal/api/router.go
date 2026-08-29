@@ -35,7 +35,7 @@ func NewRouter(cfg *config.Config, db *sql.DB) (*gin.Engine, *worker.AudioProces
 	reportService := service.NewReportService(sessionRepo, identityRepo)
 	aiService := service.NewAIService(cfg)
 	deviceService := service.NewDeviceService(deviceRepo)
-	accountService := service.NewAccountService(userRepo, identityRepo, deviceRepo, sessionRepo, tokenRepo)
+	accountService := service.NewAccountService(userRepo, identityRepo, deviceRepo, sessionRepo, tokenRepo, cfg.AudioEncryptionKey)
 
 	// handlers
 	healthHandler := NewHealthHandler(db)
@@ -48,7 +48,7 @@ func NewRouter(cfg *config.Config, db *sql.DB) (*gin.Engine, *worker.AudioProces
 	accountHandler := NewAccountHandler(accountService)
 
 	// worker
-	processor := worker.NewAudioProcessor(sessionRepo, sttService, identityRepo, aiService, cfg.AudioEncryptionKey)
+	processor := worker.NewAudioProcessor(sessionRepo, sttService, identityRepo, aiService, accountService, cfg.AudioEncryptionKey)
 
 	r.GET("/health", healthHandler.Check)
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
@@ -80,14 +80,31 @@ func NewRouter(cfg *config.Config, db *sql.DB) (*gin.Engine, *worker.AudioProces
 			authed.GET("/reports/stats", reportHandler.Stats)
 			authed.GET("/account/export", accountHandler.Export)
 			authed.DELETE("/account", accountHandler.Delete)
+			authed.GET("/account/asr", accountHandler.GetAsr)
+			authed.PUT("/account/asr", accountHandler.UpdateAsr)
+			authed.GET("/account/ai", accountHandler.GetAi)
+			authed.PUT("/account/ai", accountHandler.UpdateAi)
 
-			authed.POST("/devices/bind-code", deviceHandler.GenerateBindCode)
-			authed.POST("/devices/bind", deviceHandler.Bind)
 			authed.GET("/devices", deviceHandler.List)
+			authed.POST("/devices", deviceHandler.CreateDevice)
 			authed.GET("/devices/:id", deviceHandler.Get)
 			authed.DELETE("/devices/:id", deviceHandler.Unbind)
 			authed.POST("/devices/:id/heartbeat", deviceHandler.Heartbeat)
 			authed.POST("/devices/:id/command", deviceHandler.Command)
+		}
+
+		// 设备态路由组。必须与 authed 分开：DeviceAuth 会写入与用户态相同的
+		// CtxUserID，一旦把设备接口并进 authed，设备 token 就能访问时间线、
+		// 账号导出乃至删号。这里只暴露设备真正需要的三个接口。
+		device := v1.Group("/device")
+		{
+			authedDevice := device.Group("")
+			authedDevice.Use(middleware.DeviceAuth(deviceService))
+			{
+				authedDevice.POST("/audio/upload", audioHandler.Upload)
+				authedDevice.POST("/heartbeat", deviceHandler.DeviceHeartbeat)
+				authedDevice.POST("/commands/:id/ack", deviceHandler.AckCommand)
+			}
 		}
 	}
 

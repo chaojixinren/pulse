@@ -1,0 +1,76 @@
+{
+  "_comment": "Pulse 设备配置。把本文件复制到 TF 卡根目录，设备启动时自动读取。字段缺失时回退固件内置默认值，删掉不想改的项即可。",
+
+  "wifi": {
+    "ssid": "",
+    "password": "",
+    "connect_timeout_ms": 15000,
+    "reconnect_min_ms": 1000,
+    "reconnect_max_ms": 60000
+  },
+
+  "cloud": {
+    "_comment": "base_url 改成后端的地址。auth_scheme 现在填 Bearer + 用户 JWT；等后端补上设备鉴权后改成 Device + device_token 即可，固件无需重编译。",
+    "base_url": "http://192.168.1.100:8080",
+    "upload_path": "/api/v1/audio/upload",
+    "device_id": "",
+    "auth_scheme": "Bearer",
+    "auth_token": "",
+    "request_timeout_ms": 30000,
+    "max_retry": 5,
+    "retry_backoff_ms": 2000,
+    "verify_tls": false
+  },
+
+  "audio": {
+    "_comment": "采样率/位宽/声道被后端 stt.go 写死为 16kHz/16bit/mono，故不在此暴露。gain_shift 用于补 PDM 增益，录音过小就调大（每 +1 约 6dB）。",
+    "dma_buf_count": 8,
+    "dma_buf_len": 512,
+    "gain_shift": 0,
+    "dc_removal": true,
+    "segment_ms": 30000,
+    "segment_max_bytes": 960000
+  },
+
+  "vad": {
+    "_comment": "energy_threshold 必须现场实测：跑 M5 测试看串口能量曲线，取安静时与说话时的中间值。",
+    "enabled": true,
+    "energy_threshold": 1500,
+    "zcr_min": 5,
+    "zcr_max": 120,
+    "speech_confirm_ms": 150,
+    "hangover_ms": 800,
+    "preroll_ms": 300,
+    "min_segment_ms": 1000
+  },
+
+  "storage": {
+    "_comment": "sd_freq_mhz 挂不上卡就往下调（20 -> 10 -> 4）。sd_use_1bit=true 可绕过 D1/D2/D3。",
+    "spool_dir": "/rec/pending",
+    "failed_dir": "/rec/failed",
+    "max_spool_mb": 2048,
+    "min_free_mb": 64,
+    "sd_freq_mhz": 20,
+    "sd_use_1bit": false,
+    "fallback_to_psram": true,
+    "psram_buffer_kb": 4096
+  },
+
+  "power": {
+    "_comment": "三级功耗：Active(亮屏录音) -> Idle(灭屏但继续录音) -> DeepSleep(停录)。deep_sleep_ms=0 表示永不自动深睡，避免设备白天聋掉；只由 PWR 键或电量低于 crit 触发。",
+    "screen_dim_ms": 30000,
+    "deep_sleep_ms": 0,
+    "sleep_requires_empty_spool": true,
+    "battery_warn_pct": 10,
+    "battery_crit_pct": 5,
+    "backlight_pct": 70,
+    "pmu_poll_ms": 1000
+  },
+
+  "ui": {
+    "rotation": 0,
+    "lvgl_tick_ms": 5,
+    "timezone": "CST-8",
+    "ntp_server": "pool.ntp.org"
+  }
+}

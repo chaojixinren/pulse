@@ -168,7 +168,6 @@ export function Component() {
         </div>
       ) : items.length === 0 ? (
         <Empty
-          icon="🕒"
           title="暂无时间线记录"
           description="录制语音并完成转写后，会在这里显示。"
         />

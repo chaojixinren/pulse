@@ -8,11 +8,10 @@ import type { Device } from '@/types/device.types';
 
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
-  generateBindCode: vi.fn(),
 }));
 
 vi.mock('@/services/device.service', () => ({
-  deviceService: { list: mocks.list, generateBindCode: mocks.generateBindCode },
+  deviceService: { list: mocks.list },
 }));
 
 const device = (overrides: Partial<Device> = {}): Device => ({
@@ -71,23 +70,6 @@ describe('DeviceList 页面', () => {
     expect(await screen.findByText('网络错误')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: '重试' }));
     expect(await screen.findByText('我的设备')).toBeInTheDocument();
-  });
-
-  it('生成绑定码并展示', async () => {
-    mocks.list.mockResolvedValue([]);
-    mocks.generateBindCode.mockResolvedValue({
-      id: 'c1',
-      user_id: 'u1',
-      code: '123456',
-      expires_at: '2099-01-01T00:10:00Z',
-      created_at: '',
-    });
-    renderPage();
-    await screen.findByText('还没有设备');
-
-    await userEvent.click(screen.getByRole('button', { name: '生成绑定码' }));
-    expect(await screen.findByText('123456')).toBeInTheDocument();
-    expect(mocks.generateBindCode).toHaveBeenCalledTimes(1);
   });
 
   it('点击绑定设备跳转绑定页', async () => {
