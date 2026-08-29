@@ -309,4 +309,3 @@ func TestE2EIdentityCRUD(t *testing.T) {
 
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
-

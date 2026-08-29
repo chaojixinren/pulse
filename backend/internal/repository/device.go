@@ -191,4 +191,3 @@ func (r *DeviceRepo) AckCommand(ctx context.Context, id, deviceUUID, status stri
 	}
 	return n > 0, nil
 }
-
