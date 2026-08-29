@@ -20,7 +20,7 @@ Pulse（时笺）是一个智能身份空间系统：通过可穿戴硬件采集
 ### 后端（`backend/`，Go 1.26.5 + Gin）
 
 - **Phase 1 MVP**：项目骨架、JWT 认证（bcrypt + refresh token）、音频上传/存储、会话状态机、StepFun STT 转写、身份管理、时间线、日报。
-- **Phase 2 AI**：adk-go 身份识别、待办/承诺/笔记提取、设备管理（绑定码/绑定/解绑/指令）、AI 结果展示。
+- **Phase 2 AI**：adk-go 身份识别、待办/承诺/笔记提取、设备管理（创建/绑定/解绑/指令，一次性手抄 token）、AI 结果展示。
 - **Phase 3 生产化**：音频 AES-256-GCM 加密、账号导出/注销、周报/统计、可观测性（metrics/trace/日志）、限流与优雅关闭。
 - 测试：`go test ./...` 全绿（单元 + sqlmock 集成 + httptest API e2e）；真实 MySQL 的 live e2e 在 CI 中跑（`-tags e2e`）。
 - CI/CD：`.github/workflows/ci.yml`（lint/test/e2e/docker）+ `release.yml`（推送 GHCR）。

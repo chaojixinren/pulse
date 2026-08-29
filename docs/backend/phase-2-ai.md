@@ -123,7 +123,7 @@ internal/model/device.go
 ### HTTP 端点
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | /api/v1/devices/bind | 用户绑定设备（输入 device_id + 绑定码） |
+| POST | /api/v1/devices | 创建/绑定设备，一次性返回 device_token 供手抄到硬件 |
 | GET  | /api/v1/devices | 当前用户设备列表 |
 | GET  | /api/v1/devices/:id | 设备详情 |
 | DELETE | /api/v1/devices/:id | 解绑 |
@@ -132,10 +132,10 @@ internal/model/device.go
 
 ### 设备认证说明
 - 硬件上传音频不走用户名密码，用设备级密钥（`device_token`）签名。
-- 设备绑定流程：前端生成绑定码 → 硬件首次连接时携带绑定码换取设备 token。
+- 设备绑定流程：App 创建/绑定设备（`POST /api/v1/devices`）一次性返回 device_token，用户手抄到硬件 config.json（`cloud.auth_token`）；服务端仅存 token 哈希。
 
 ### 验收标准
-- [x] 设备可绑定/解绑，绑定码一次性有效。
+- [x] 设备可绑定/解绑，device_token 仅创建时返回一次。
 - [x] 心跳更新 last_seen_at 与电量。
 - [x] 指令可下发（Phase 2 先落库，硬件按需拉取）。
 
@@ -153,8 +153,8 @@ internal/model/device.go
 两个模块已落地并配齐单元测试 + e2e 测试（`go test -race ./...` 全部通过）：
 
 - **AI 分析**：`internal/service/ai.go` 基于 adk-go 的 openaimodel（OpenAI 兼容接口，配置项 `AI_API_KEY` / `AI_BASE_URL` / `AI_MODEL`）做显式两阶段编排——先身份识别（worker 拉取用户身份列表作为候选标签、返回 identity_id + confidence），再信息提取（todos/commitments/notes）。JSON 解析失败重试一次，再失败降级为 `confidence=0`、不绑定身份；置信度低于 `AI_CONFIDENCE_THRESHOLD`（默认 0.6）同样不绑定。提示词集中在 `pkg/prompt`。
-- **设备管理**：`internal/service/device.go` + `internal/repository/device.go` 实现绑定码（一次性、10 分钟有效）、绑定/解绑、心跳、指令落库；绑定返回一次性设备 token（仅存哈希）。
-- 数据模型见 `backend/migrations/002_phase2.sql`（devices / device_bind_codes / device_commands）。
+- **设备管理**：`internal/service/device.go` + `internal/repository/device.go` 实现设备创建/绑定（一次性返回 device_token、仅存哈希）、解绑、心跳、指令落库。
+- 数据模型见 `backend/migrations/002_phase2.sql`（devices / device_commands）。
 
 > 注：AI 分析现已接入 adk-go，采用其 openaimodel（OpenAI 兼容接口）做显式两阶段编排——先身份识别、再信息提取；`AIService` 对外签名不变，后续如需升级为 sequentialagent/eino Graph 编排可平滑替换内部实现。
 
@@ -170,7 +170,7 @@ internal/model/device.go
 | 提取待办/承诺/笔记，字段格式正确（含 due_at） | `ai_extended_test.go` | 同上 |
 | LLM 非法 JSON / 失败不崩溃、降级不丢会话 | `ai_extended_test.go` | `TestAudioProcessorAnalyzeDegradesOnAIError` |
 | 低置信度不误绑身份 | `ai_test.go`、`ai_extended_test.go` | — |
-| 设备绑定/解绑、绑定码一次性 | `device_test.go`、`device_extended_test.go` | `internal/api/e2e_test.go`、`e2e_phase2_test.go` |
+| 设备绑定/解绑、token 一次性下发 | `device_test.go`、`device_extended_test.go` | `internal/api/e2e_test.go`、`e2e_phase2_test.go` |
 | 心跳更新电量/版本 | `device_test.go`、`device_extended_test.go` | `e2e_test.go` |
 | 指令下发（落库） | `device_test.go`、`device_extended_test.go` | `e2e_phase2_test.go` |
 

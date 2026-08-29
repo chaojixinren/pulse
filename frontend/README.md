@@ -83,7 +83,7 @@ npm run preview
 - Token 管理
 
 ### 设备管理
-- 扫码绑定硬件设备
+- 创建绑定设备，一次性返回 device_token 手抄到硬件 config.json
 - 配置 WiFi 网络
 - 查看设备状态（电量、连接状态）
 - 远程控制（开始/暂停录音）

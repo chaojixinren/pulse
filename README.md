@@ -103,16 +103,6 @@ npm run dev
 - **开发环境**：VSCode + PlatformIO
 - **语言**：C / Arduino
 
-## 开发路线图
-
-- [x] 项目架构设计
-- [x] 云端 API 服务（后端 Phase 1–3）
-- [x] AI 分析引擎（身份识别 + 信息提取）
-- [x] 用户端 Web App（身份/设备/时间线/报告/账户）
-- [ ] 硬件原型开发（MVP）
-- [ ] 内测版本
-- [ ] 正式发布
-
 ## 贡献指南
 
 我们欢迎任何形式的贡献！请查看 [CONTRIBUTING.md](CONTRIBUTING.md) 了解详情。

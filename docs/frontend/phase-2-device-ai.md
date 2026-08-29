@@ -5,12 +5,12 @@
 
 ## 目标
 
-- 实现设备管理：绑定码生成、设备绑定、列表、详情、解绑、心跳状态展示、指令下发。
+- 实现设备管理：设备创建/绑定（一次性 token）、列表、详情、解绑、心跳状态展示、指令下发。
 - 实现 AI 结果展示：时间线标注 AI 识别的身份，报告/会话中呈现提取的待办、承诺、笔记。
 
 ## 完成标志（验收清单）
 
-- [ ] 用户可生成绑定码并用其绑定设备，绑定后设备出现在列表。
+- [ ] 用户可创建/绑定设备并一次性拿到 device_token 手抄到硬件，绑定后设备出现在列表。
 - [ ] 设备列表展示在线状态、电量、固件版本、最后活跃时间。
 - [ ] 用户可解绑设备、向设备下发指令（先落库）。
 - [ ] 时间线每条会话标注 AI 识别的身份（低置信度时显示「未识别」）。
@@ -38,7 +38,7 @@ Phase 1（骨架 + 认证 + 身份 + 时间线 + 日报）
 src/
 ├── pages/Device/DeviceList.tsx        # 设备列表（在线状态/电量/固件）
 ├── pages/Device/DeviceDetail.tsx      # 设备详情 + 指令下发
-├── pages/Device/BindDevice.tsx        # 绑定码输入 + 绑定
+├── pages/Device/BindDevice.tsx        # 设备 ID + 名称表单，成功后展示一次性 token
 ├── services/device.service.ts
 ├── types/device.types.ts
 └── components/business/DeviceCard.tsx # 设备卡片
@@ -61,18 +61,14 @@ export interface Device {
   updated_at: string;
 }
 
-export interface DeviceBindCode {
-  id: string;
-  user_id: string;
-  code: string;
-  expires_at: string;
-  used_at?: string;
-  created_at: string;
+export interface CreateDeviceInput {
+  device_id: string;        // 硬件侧唯一标识，需与 config.json 中 cloud.device_id 一致
+  name?: string;
 }
 
-export interface BindDeviceResult {
+export interface CreateDeviceResult {
   device: Device;
-  device_token: string;     // 一次性返回，需提示用户妥善保存
+  device_token: string;     // 一次性明文 token，仅此响应返回，服务端只存 hash
 }
 
 export interface DeviceCommand {
@@ -90,14 +86,11 @@ export interface DeviceCommand {
 
 ```typescript
 import { http } from './api';
-import { Device, DeviceBindCode, BindDeviceResult, DeviceCommand } from '@/types/device.types';
+import { Device, CreateDeviceInput, CreateDeviceResult, DeviceCommand } from '@/types/device.types';
 
 export const deviceService = {
-  generateBindCode(): Promise<DeviceBindCode> {
-    return http.post<DeviceBindCode>('/devices/bind-code');
-  },
-  bind(data: { device_id: string; name?: string; bind_code: string }): Promise<BindDeviceResult> {
-    return http.post<BindDeviceResult>('/devices/bind', data);
+  create(data: CreateDeviceInput): Promise<CreateDeviceResult> {
+    return http.post<CreateDeviceResult>('/devices', data);
   },
   list(): Promise<Device[]> {
     return http.get<Device[]>('/devices');
@@ -120,21 +113,20 @@ export const deviceService = {
 
 | 路由 | 页面 | 说明 |
 |------|------|------|
-| `/devices` | DeviceList | 设备列表 + 生成绑定码 + 绑定入口 |
-| `/devices/bind` | BindDevice | 输入设备 ID + 绑定码完成绑定 |
+| `/devices` | DeviceList | 设备列表 + 绑定入口 |
+| `/devices/bind` | BindDevice | 填写设备 ID + 名称，成功后展示一次性 token |
 | `/devices/:id` | DeviceDetail | 设备详情 + 指令下发 + 解绑 |
 
 交互约定：
 
 - 设备列表展示：名称、类型、在线状态（依据 `is_active` 与 `last_seen_at` 判定）、电量、固件版本。
-- 「生成绑定码」弹出绑定码 + 有效期倒计时；绑定码一次性使用。
-- 绑定成功后展示 `device_token`，提示用户复制保存（仅此一次）。
+- 绑定页填写设备 ID + 名称，创建成功后展示一次性 `device_token`（4 字符分组 + 复制），提示手抄到硬件 config.json（仅此一次）。
 - 指令下发：预设指令（开始录音 / 停止录音 / 上报状态）或自定义，下发后展示落库结果与状态。
 - 解绑需二次确认。
 
 ### 验收标准
 
-- [ ] 可生成绑定码，用绑定码 + 设备 ID 完成绑定。
+- [ ] 可创建设备（设备 ID + 名称），一次性拿到 `device_token` 手抄到硬件。
 - [ ] 绑定成功后设备出现在列表，`device_token` 只展示一次。
 - [ ] 设备列表正确展示在线状态、电量、固件、最后活跃时间。
 - [ ] 可解绑设备，解绑后列表更新。
@@ -214,7 +206,7 @@ export function useIdentityMap(identities: Identity[] | undefined) {
 
 ## 阶段验收清单
 
-- [ ] 设备管理全流程（生成码 → 绑定 → 列表 → 详情 → 指令 → 解绑）可用。
+- [ ] 设备管理全流程（创建 → 手抄 token → 列表 → 详情 → 指令 → 解绑）可用。
 - [ ] 设备状态（在线/电量/固件/最后活跃）正确展示。
 - [ ] 时间线身份徽标正确，低置信度场景展示「未识别」。
 - [ ] 日报 AI 待办 / 笔记结构化展示。
