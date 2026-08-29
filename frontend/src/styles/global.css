@@ -1341,6 +1341,23 @@ textarea {
   margin-bottom: var(--spacing-lg);
 }
 
+.settings-desc {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  margin: 0 0 var(--spacing-md);
+}
+
+.settings-key-actions {
+  margin-top: var(--spacing-xs);
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+}
+
 .account-row {
   display: flex;
   align-items: center;

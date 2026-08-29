@@ -127,6 +127,21 @@ const statsTrend = Array.from({ length: 30 }, (_, i) => {
 export async function mockApi(page: Page, options: MockOptions = {}): Promise<void> {
   let identities = initialIdentities.map((i) => ({ ...i }));
   let devices: Device[] = (options.devices ?? []).map((d) => ({ ...d }));
+  let asrSettings = {
+    base_url: '',
+    model: '',
+    language: 'zh',
+    enable_itn: true,
+    has_api_key: false,
+    api_key_masked: '',
+  };
+  let aiSettings = {
+    base_url: '',
+    model: '',
+    confidence_threshold: 0.6,
+    has_api_key: false,
+    api_key_masked: '',
+  };
 
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
@@ -267,6 +282,44 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<vo
     }
 
     // ---- 账户管理 ----
+    // 模拟后端的掩码逻辑：api_key 非空即视为已配置，回显尾部 4 位。
+    const applyKey = (key: unknown) => {
+      const k = String(key ?? '');
+      return {
+        has_api_key: k.length > 0,
+        api_key_masked: k.length > 4 ? '****' + k.slice(-4) : k.length > 0 ? '****' : '',
+      };
+    };
+    if (method === 'GET' && path === '/account/asr') {
+      return respond(asrSettings);
+    }
+    if (method === 'PUT' && path === '/account/asr') {
+      const b = body();
+      asrSettings = {
+        ...asrSettings,
+        base_url: b.base_url !== undefined ? String(b.base_url) : asrSettings.base_url,
+        model: b.model !== undefined ? String(b.model) : asrSettings.model,
+        language: b.language !== undefined ? String(b.language) : asrSettings.language,
+        enable_itn: b.enable_itn !== undefined ? Boolean(b.enable_itn) : asrSettings.enable_itn,
+        ...(b.api_key !== undefined ? applyKey(b.api_key) : {}),
+      };
+      return respond(asrSettings);
+    }
+    if (method === 'GET' && path === '/account/ai') {
+      return respond(aiSettings);
+    }
+    if (method === 'PUT' && path === '/account/ai') {
+      const b = body();
+      aiSettings = {
+        ...aiSettings,
+        base_url: b.base_url !== undefined ? String(b.base_url) : aiSettings.base_url,
+        model: b.model !== undefined ? String(b.model) : aiSettings.model,
+        confidence_threshold:
+          b.confidence_threshold !== undefined ? Number(b.confidence_threshold) : aiSettings.confidence_threshold,
+        ...(b.api_key !== undefined ? applyKey(b.api_key) : {}),
+      };
+      return respond(aiSettings);
+    }
     if (method === 'GET' && path === '/account/export') {
       return respond({
         user: USER,
