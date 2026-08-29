@@ -1,7 +1,7 @@
-# Pulse - 时笺
+# Pulse - 拾笺
 
 <p align="center">
-  <img src="banner.svg" alt="Pulse 时笺" width="100%" />
+  <img src="banner.svg" alt="Pulse 拾笺" width="100%" />
 </p>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -11,7 +11,7 @@
 
 ## 项目简介
 
-时笺 是一个智能身份管理系统，帮助用户在多重生活角色中自由切换。通过可穿戴硬件设备采集语音，云端 AI 分析理解你的对话内容，自动识别当前身份（员工、父母、朋友等），并生成个性化的报告。
+拾笺 是一个智能身份管理系统，帮助用户在多重生活角色中自由切换。通过可穿戴硬件设备采集语音，云端 AI 分析理解你的对话内容，自动识别当前身份（员工、父母、朋友等），并生成个性化的报告。
 
 ### 核心功能
 
