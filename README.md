@@ -36,19 +36,32 @@ Pulse/
 
 ### 前置要求
 
-- **后端**：Go 1.26.x
-- **前端**：Node.js 20+
+- **Docker 全栈（推荐 / 生产部署）**：仅需 Docker + Docker Compose，无需安装 Go / Node（构建在镜像内完成）
+- **本地开发后端**：Go 1.26.x
+- **本地开发前端**：Node.js 20+
 - **硬件**：ESP32-S3
 
 ### 安装步骤
 
-#### 0. Docker 全栈（推荐）
+#### 0. Docker 全栈（推荐，生产部署亦用此方式）
 
 ```bash
+# 1) 准备环境变量（复制后填写生产密钥，见下方说明）
+cp .env.example .env
+
+# 2) 构建并启动（依次 mysql → migrate → backend → frontend）
 docker compose up -d --build
+
 # 前端：http://localhost:5173 （FRONTEND_PORT 可改）
 # 后端健康检查：curl http://localhost:8080/health
 ```
+
+> **部署到服务器**：把仓库 clone 到服务器后执行上述两步即可（Dockerfile 为多阶段构建，服务器无需预装 Go / Node）。`.env` 中**至少**要改这些生产项：
+> - `JWT_SECRET`、`MYSQL_ROOT_PASSWORD`、`MYSQL_PASSWORD` —— 默认是开发弱口令，务必替换
+> - `STEPFUN_API_KEY`、`AI_API_KEY` —— 不填则语音转写与 AI 分析不可用
+> - `AUDIO_ENCRYPTION_KEY` —— 生产建议配置（生成：`openssl rand -base64 32`）
+>
+> 注意：`docker compose` 读取的是**仓库根目录**的 `.env`（不是 `backend/.env`，后者仅用于 `go run` 本地开发）。
 
 #### 1. 后端服务
 

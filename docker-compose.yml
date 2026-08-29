@@ -27,7 +27,7 @@ services:
     image: pulse-backend:local
     entrypoint: ["pulse-migrate"]
     environment: &backend-base
-      DATABASE_DSN: "${DATABASE_DSN:-pulse:pulsepass@tcp(mysql:3306)/pulse?charset=utf8mb4&parseTime=True&loc=Local}"
+      DATABASE_DSN: "${MYSQL_USER:-pulse}:${MYSQL_PASSWORD:-pulsepass}@tcp(mysql:3306)/${MYSQL_DATABASE:-pulse}?charset=utf8mb4&parseTime=True&loc=Local"
       JWT_SECRET: "${JWT_SECRET:-dev-secret-change-me}"
     depends_on:
       mysql:
@@ -45,6 +45,11 @@ services:
       STEPFUN_API_KEY: "${STEPFUN_API_KEY:-}"
       STEPFUN_API_BASE: "${STEPFUN_API_BASE:-https://api.stepfun.com/v1}"
       STEPFUN_STT_MODEL: "${STEPFUN_STT_MODEL:-stepaudio-2.5-asr}"
+      # AI 分析（adk-go / OpenAI 兼容）：身份识别 + 待办/承诺/笔记提取
+      AI_API_KEY: "${AI_API_KEY:-}"
+      AI_BASE_URL: "${AI_BASE_URL:-https://api.openai.com/v1}"
+      AI_MODEL: "${AI_MODEL:-gpt-4o-mini}"
+      AI_CONFIDENCE_THRESHOLD: "${AI_CONFIDENCE_THRESHOLD:-0.6}"
       # 音频加密存储（AES-256-GCM）：32 字节密钥的 base64 编码；留空关闭加密（生产必须配置）。
       AUDIO_ENCRYPTION_KEY: "${AUDIO_ENCRYPTION_KEY:-}"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
