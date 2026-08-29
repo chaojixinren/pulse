@@ -10,14 +10,6 @@ export function formatDuration(totalSeconds: number): string {
   return `${secs} 秒`;
 }
 
-// 倒计时（用于绑定码有效期展示），格式化为 MM:SS。
-export function formatCountdown(totalSeconds: number): string {
-  const s = Math.max(0, Math.floor(totalSeconds));
-  const minutes = Math.floor(s / 60);
-  const secs = s % 60;
-  return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-}
-
 // 简短时长，用于列表徽标。
 export function formatDurationShort(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));

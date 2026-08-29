@@ -34,7 +34,6 @@ var (
 	e2eSessionListCols = []string{"id", "user_id", "identity_id", "device_id", "audio_mime", "transcript", "duration", "file_size", "status", "error_message", "extracted_data", "ai_confidence", "recorded_at", "processed_at", "created_at", "updated_at"}
 	e2eIdentityCols    = []string{"id", "user_id", "name", "description", "color", "icon", "is_default", "created_at", "updated_at", "deleted_at"}
 	e2eDeviceCols      = []string{"id", "user_id", "device_id", "name", "device_type", "firmware_version", "battery_level", "last_seen_at", "is_active", "device_token_hash", "created_at", "updated_at"}
-	e2eBindCodeCols    = []string{"id", "user_id", "code", "expires_at", "used_at", "created_at"}
 )
 
 const e2eSecret = "e2e-secret"
@@ -311,69 +310,3 @@ func TestE2EIdentityCRUD(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestE2EDeviceBindFlow(t *testing.T) {
-	router, mock, _ := newE2ERouter(t)
-	token := e2eToken(t, "u1")
-	now := time.Now().UTC()
-
-	// 1. 生成绑定码
-	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO device_bind_codes")).
-		WithArgs(sqlmock.AnyArg(), "u1", sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-
-	w := perform(router, http.MethodPost, "/api/v1/devices/bind-code", nil, "application/json", token)
-	require.Equal(t, http.StatusOK, w.Code, "响应: %s", w.Body.String())
-	code := dataOf(decode(t, w))["code"].(string)
-	assert.Len(t, code, 6)
-
-	// 2. 绑定设备
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, user_id, code")).
-		WithArgs(code).
-		WillReturnRows(sqlmock.NewRows(e2eBindCodeCols).AddRow("c1", "u1", code, now.Add(time.Hour), nil, now))
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, user_id, device_id")).
-		WithArgs("dev-1").
-		WillReturnRows(sqlmock.NewRows(e2eDeviceCols))
-	mock.ExpectExec(regexp.QuoteMeta("UPDATE device_bind_codes SET used_at")).
-		WithArgs(sqlmock.AnyArg(), code).
-		WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO devices")).
-		WithArgs(sqlmock.AnyArg(), "u1", "dev-1", "手表", "wearable", nil, nil, nil, true, sqlmock.AnyArg()).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-
-	body, ct := jsonReq(t, map[string]string{"device_id": "dev-1", "name": "手表", "bind_code": code})
-	w = perform(router, http.MethodPost, "/api/v1/devices/bind", body, ct, token)
-	require.Equal(t, http.StatusOK, w.Code, "响应: %s", w.Body.String())
-	bindData := dataOf(decode(t, w))
-	device := bindData["device"].(map[string]interface{})
-	assert.Equal(t, "dev-1", device["device_id"])
-	assert.NotEmpty(t, bindData["device_token"], "绑定应返回设备 token")
-	deviceID := device["id"].(string)
-
-	// 3. 心跳
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, user_id, device_id")).
-		WithArgs(deviceID, "u1").
-		WillReturnRows(sqlmock.NewRows(e2eDeviceCols).AddRow(deviceID, "u1", "dev-1", "手表", "wearable", nil, nil, nil, true, "hash", now, now))
-	mock.ExpectExec(regexp.QuoteMeta("UPDATE devices SET firmware_version")).
-		WithArgs(nil, 80, sqlmock.AnyArg(), sqlmock.AnyArg(), deviceID, "u1").
-		WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, user_id, device_id")).
-		WithArgs(deviceID, "u1").
-		WillReturnRows(sqlmock.NewRows(e2eDeviceCols).AddRow(deviceID, "u1", "dev-1", "手表", "wearable", nil, nil, nil, true, "hash", now, now))
-
-	body, ct = jsonReq(t, map[string]int{"battery_level": 80})
-	w = perform(router, http.MethodPost, "/api/v1/devices/"+deviceID+"/heartbeat", body, ct, token)
-	require.Equal(t, http.StatusOK, w.Code, "响应: %s", w.Body.String())
-
-	// 4. 解绑
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, user_id, device_id")).
-		WithArgs(deviceID, "u1").
-		WillReturnRows(sqlmock.NewRows(e2eDeviceCols).AddRow(deviceID, "u1", "dev-1", "手表", "wearable", nil, nil, nil, true, "hash", now, now))
-	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM devices")).
-		WithArgs(deviceID, "u1").
-		WillReturnResult(sqlmock.NewResult(0, 1))
-
-	w = perform(router, http.MethodDelete, "/api/v1/devices/"+deviceID, nil, "", token)
-	require.Equal(t, http.StatusOK, w.Code, "响应: %s", w.Body.String())
-
-	assert.NoError(t, mock.ExpectationsWereMet())
-}

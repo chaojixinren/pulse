@@ -18,16 +18,6 @@ type Device struct {
 	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
-// DeviceBindCode 对应 device_bind_codes 表（一次性绑定码）。
-type DeviceBindCode struct {
-	ID        string     `json:"id"`
-	UserID    string     `json:"user_id"`
-	Code      string     `json:"code"`
-	ExpiresAt time.Time  `json:"expires_at"`
-	UsedAt    *time.Time `json:"used_at,omitempty"`
-	CreatedAt time.Time  `json:"created_at"`
-}
-
 // DeviceCommand 对应 device_commands 表（下发给硬件的指令，先落库）。
 type DeviceCommand struct {
 	ID        string    `json:"id"`
@@ -38,3 +28,4 @@ type DeviceCommand struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
+

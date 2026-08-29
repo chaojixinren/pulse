@@ -1,18 +1,14 @@
 import {
-  BindDeviceInput,
-  BindDeviceResult,
   Device,
-  DeviceBindCode,
   DeviceCommand,
+  CreateDeviceInput,
+  CreateDeviceResult,
 } from '@/types/device.types';
 import { http } from './api';
 
 export const deviceService = {
-  generateBindCode(): Promise<DeviceBindCode> {
-    return http.post<DeviceBindCode>('/devices/bind-code');
-  },
-  bind(data: BindDeviceInput): Promise<BindDeviceResult> {
-    return http.post<BindDeviceResult>('/devices/bind', data);
+  create(data: CreateDeviceInput): Promise<CreateDeviceResult> {
+    return http.post<CreateDeviceResult>('/devices', data);
   },
   list(): Promise<Device[]> {
     return http.get<Device[]>('/devices');

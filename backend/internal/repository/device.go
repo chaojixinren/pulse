@@ -27,6 +27,8 @@ func scanDevice(row interface{ Scan(...interface{}) error }) (*model.Device, err
 	return &d, nil
 }
 
+// ========== Device CRUD ==========
+
 func (r *DeviceRepo) Create(ctx context.Context, d *model.Device) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO devices (id, user_id, device_id, name, device_type, firmware_version, battery_level, last_seen_at, is_active, device_token_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -83,39 +85,6 @@ func (r *DeviceRepo) UpdateHeartbeat(ctx context.Context, id, userID string, fir
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE devices SET firmware_version = COALESCE(?, firmware_version), battery_level = COALESCE(?, battery_level), last_seen_at = ?, updated_at = ? WHERE id = ? AND user_id = ? AND is_active = TRUE`,
 		firmware, battery, now, now, id, userID)
-	return err
-}
-
-const bindCodeColumns = "id, user_id, code, expires_at, used_at, created_at"
-
-func scanBindCode(row interface{ Scan(...interface{}) error }) (*model.DeviceBindCode, error) {
-	var c model.DeviceBindCode
-	if err := row.Scan(&c.ID, &c.UserID, &c.Code, &c.ExpiresAt, &c.UsedAt, &c.CreatedAt); err != nil {
-		return nil, err
-	}
-	return &c, nil
-}
-
-func (r *DeviceRepo) CreateBindCode(ctx context.Context, c *model.DeviceBindCode) error {
-	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO device_bind_codes (id, user_id, code, expires_at) VALUES (?, ?, ?, ?)`,
-		c.ID, c.UserID, c.Code, c.ExpiresAt)
-	return err
-}
-
-func (r *DeviceRepo) GetBindCodeByCode(ctx context.Context, code string) (*model.DeviceBindCode, error) {
-	row := r.db.QueryRowContext(ctx, `SELECT `+bindCodeColumns+` FROM device_bind_codes WHERE code = ?`, code)
-	c, err := scanBindCode(row)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	return c, err
-}
-
-// MarkBindCodeUsed 将绑定码标记为已使用（一次性）。
-func (r *DeviceRepo) MarkBindCodeUsed(ctx context.Context, code string) error {
-	_, err := r.db.ExecContext(ctx,
-		`UPDATE device_bind_codes SET used_at = ? WHERE code = ? AND used_at IS NULL`, time.Now().UTC(), code)
 	return err
 }
 
@@ -222,3 +191,4 @@ func (r *DeviceRepo) AckCommand(ctx context.Context, id, deviceUUID, status stri
 	}
 	return n > 0, nil
 }
+

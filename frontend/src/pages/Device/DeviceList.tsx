@@ -53,7 +53,7 @@ export function Component() {
       ) : devices.length === 0 ? (
         <Empty
           title="还没有设备"
-          description="在硬件屏幕查看 6 位配对码，输入后即可完成配对并在此看到设备。"
+          description="创建后一次性返回设备 token，手抄到硬件 config.json 即可完成接入。"
           action={<Button onClick={() => navigate('/devices/bind')}>去绑定设备</Button>}
         />
       ) : (

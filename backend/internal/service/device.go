@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/rand"
 	"strings"
 	"time"
 
@@ -13,7 +12,6 @@ import (
 )
 
 const (
-	bindCodeTTL       = 10 * time.Minute
 	defaultDeviceType = "wearable"
 	defaultDeviceName = "我的设备"
 )
@@ -30,123 +28,6 @@ type DeviceService struct {
 
 func NewDeviceService(repo *repository.DeviceRepo) *DeviceService {
 	return &DeviceService{repo: repo}
-}
-
-// GenerateBindCode 生成一次性绑定码（10 分钟内有效），供前端展示、硬件首次连接时使用。
-func (s *DeviceService) GenerateBindCode(ctx context.Context, userID string) (*model.DeviceBindCode, error) {
-	code, err := randomBindCode(6)
-	if err != nil {
-		return nil, apperrors.WrapInternal(err)
-	}
-	c := &model.DeviceBindCode{
-		ID:        utils.NewUUID(),
-		UserID:    userID,
-		Code:      code,
-		ExpiresAt: time.Now().UTC().Add(bindCodeTTL),
-	}
-	if err := s.repo.CreateBindCode(ctx, c); err != nil {
-		return nil, apperrors.WrapInternal(err)
-	}
-	return c, nil
-}
-
-// Bind 用户在 App 内用 device_id + 一次性绑定码绑定设备，返回设备与设备级 token（只返回一次）。
-func (s *DeviceService) Bind(ctx context.Context, userID, deviceID, name, bindCode string) (*model.Device, string, error) {
-	return s.bindWithCode(ctx, userID, deviceID, name, bindCode, false)
-}
-
-// Claim 设备自助配对：设备拿自己的 device_id + 用户在 App 上生成的一次性绑定码换取 device_token，
-// 换到后写入 NVS。用户身份从绑定码反解，因此设备侧不需要任何预置凭据，
-// 免去了把 token 手抄进 TF 卡这一步。
-//
-// 安全边界：本方法对应免鉴权端点，唯一屏障是 6 位绑定码 + 10 分钟有效期，
-// 且按产品决策**不做尝试次数限制**——穷举绑定码即可拿到对应账号的设备凭据。
-// 后续若要补限流，在入口处按 bindCode / 来源 IP 计数即可，下面的逻辑无需改动。
-func (s *DeviceService) Claim(ctx context.Context, deviceID, name, bindCode string) (*model.Device, string, error) {
-	return s.bindWithCode(ctx, "", deviceID, name, bindCode, true)
-}
-
-// bindWithCode 是 Bind / Claim 的共用实现。
-// expectUserID 非空时要求绑定码属于该用户（用户态绑定）；为空时用户身份由绑定码反解（设备自助配对）。
-// allowRepair 为 true 时，同一用户重复配对同一设备会轮换 token 而非报错，
-// 用于设备恢复出厂、NVS 被擦除后重新配对。
-func (s *DeviceService) bindWithCode(ctx context.Context, expectUserID, deviceID, name, bindCode string, allowRepair bool) (*model.Device, string, error) {
-	deviceID = strings.TrimSpace(deviceID)
-	bindCode = strings.TrimSpace(bindCode)
-	name = strings.TrimSpace(name)
-
-	if deviceID == "" {
-		return nil, "", apperrors.NewBadRequest("设备标识不能为空")
-	}
-	if bindCode == "" {
-		return nil, "", apperrors.NewBadRequest("绑定码不能为空")
-	}
-
-	code, err := s.repo.GetBindCodeByCode(ctx, bindCode)
-	if err != nil {
-		return nil, "", apperrors.WrapInternal(err)
-	}
-	now := time.Now().UTC()
-	// 统一用同一句错误信息，避免泄漏"码存在但属于别人"这类信息。
-	if code == nil || code.UsedAt != nil || code.ExpiresAt.Before(now) {
-		return nil, "", apperrors.NewBadRequest("绑定码无效或已过期")
-	}
-	if expectUserID != "" && code.UserID != expectUserID {
-		return nil, "", apperrors.NewBadRequest("绑定码无效或已过期")
-	}
-	userID := code.UserID
-
-	token, err := utils.RandomToken(32)
-	if err != nil {
-		return nil, "", apperrors.WrapInternal(err)
-	}
-	tokenHash := utils.SHA256Hex(token)
-
-	existing, err := s.repo.GetByDeviceID(ctx, deviceID)
-	if err != nil {
-		return nil, "", apperrors.WrapInternal(err)
-	}
-	if existing != nil {
-		// 设备已存在时，只有"同一用户 + 允许重新配对"才轮换 token。
-		// 否则一律拒绝，防止拿自己的绑定码劫持他人已绑定的设备。
-		if !allowRepair || existing.UserID != userID {
-			return nil, "", apperrors.NewBadRequest("该设备已被绑定")
-		}
-		if err := s.repo.MarkBindCodeUsed(ctx, bindCode); err != nil {
-			return nil, "", apperrors.WrapInternal(err)
-		}
-		if err := s.repo.RotateToken(ctx, existing.ID, tokenHash); err != nil {
-			return nil, "", apperrors.WrapInternal(err)
-		}
-		refreshed, err := s.repo.GetByIDOnly(ctx, existing.ID)
-		if err != nil {
-			return nil, "", apperrors.WrapInternal(err)
-		}
-		return refreshed, token, nil
-	}
-
-	if name == "" {
-		name = defaultDeviceName
-	}
-
-	device := &model.Device{
-		ID:              utils.NewUUID(),
-		UserID:          userID,
-		DeviceID:        deviceID,
-		Name:            name,
-		DeviceType:      defaultDeviceType,
-		IsActive:        true,
-		DeviceTokenHash: tokenHash,
-	}
-
-	// 先消费绑定码，再创建设备，保证一次性。
-	if err := s.repo.MarkBindCodeUsed(ctx, bindCode); err != nil {
-		return nil, "", apperrors.WrapInternal(err)
-	}
-	if err := s.repo.Create(ctx, device); err != nil {
-		return nil, "", apperrors.WrapInternal(err)
-	}
-	return device, token, nil
 }
 
 func (s *DeviceService) List(ctx context.Context, userID string) ([]model.Device, error) {
@@ -301,19 +182,66 @@ func (s *DeviceService) AckCommand(ctx context.Context, deviceUUID, commandID, s
 	return nil
 }
 
-// randomBindCode 生成 n 位数字绑定码。
-func randomBindCode(n int) (string, error) {
-	if n <= 0 {
-		n = 6
+// ========== Device 创建/绑定（App 领养，一次性下发 token） ==========
+
+// CreateDevice App 用户创建设备绑定并生成设备令牌。
+//
+// 硬件回退为「纯上传 + token 手抄」后，配对退化为：用户在 App 填 device_id
+// 创建设备，后端一次性返回明文 device_token，用户抄录进硬件 config.json。
+// 同一 device_id 重复创建视为重新配对：轮换 token，旧 token 立即失效。
+func (s *DeviceService) CreateDevice(ctx context.Context, userID, deviceID, deviceName string) (*model.Device, string, error) {
+	userID = strings.TrimSpace(userID)
+	deviceID = strings.TrimSpace(deviceID)
+	deviceName = strings.TrimSpace(deviceName)
+	if userID == "" || deviceID == "" {
+		return nil, "", apperrors.NewBadRequest("user_id 和 device_id 不能为空")
 	}
-	const digits = "0123456789"
-	buf := make([]byte, n)
-	if _, err := rand.Read(buf); err != nil {
-		return "", err
+
+	existing, err := s.repo.GetByDeviceID(ctx, deviceID)
+	if err != nil {
+		return nil, "", apperrors.WrapInternal(err)
 	}
-	out := make([]byte, n)
-	for i, b := range buf {
-		out[i] = digits[int(b)%len(digits)]
+
+	var device *model.Device
+	var deviceToken string
+
+	if existing != nil {
+		// 设备已存在，只允许原用户重新配对（轮换 token，旧 token 立即失效）。
+		if existing.UserID != userID {
+			return nil, "", apperrors.NewBadRequest("该设备已被其他用户绑定")
+		}
+		token, err := utils.RandomToken(32)
+		if err != nil {
+			return nil, "", apperrors.WrapInternal(err)
+		}
+		if err := s.repo.RotateToken(ctx, existing.ID, utils.SHA256Hex(token)); err != nil {
+			return nil, "", apperrors.WrapInternal(err)
+		}
+		device = existing
+		deviceToken = token
+	} else {
+		// 新设备，创建绑定。
+		token, err := utils.RandomToken(32)
+		if err != nil {
+			return nil, "", apperrors.WrapInternal(err)
+		}
+		if deviceName == "" {
+			deviceName = defaultDeviceName
+		}
+		device = &model.Device{
+			ID:              utils.NewUUID(),
+			UserID:          userID,
+			DeviceID:        deviceID,
+			Name:            deviceName,
+			DeviceType:      defaultDeviceType,
+			IsActive:        true,
+			DeviceTokenHash: utils.SHA256Hex(token),
+		}
+		if err := s.repo.Create(ctx, device); err != nil {
+			return nil, "", apperrors.WrapInternal(err)
+		}
+		deviceToken = token
 	}
-	return string(out), nil
+
+	return device, deviceToken, nil
 }

@@ -145,13 +145,15 @@ air
 
 ### 设备管理（Phase 2）
 
-- `POST /api/v1/devices/bind-code` - 生成设备绑定码
-- `POST /api/v1/devices/bind` - 绑定设备
+- `POST /api/v1/devices` - 创建设备绑定，一次性返回 device_token 供手抄到硬件
 - `GET /api/v1/devices` - 设备列表
 - `GET /api/v1/devices/:id` - 设备详情
 - `DELETE /api/v1/devices/:id` - 解绑设备
 - `POST /api/v1/devices/:id/heartbeat` - 设备心跳
 - `POST /api/v1/devices/:id/command` - 下发指令
+- `POST /api/v1/device/audio/upload` - 设备态上传（Authorization: Device <token>）
+- `POST /api/v1/device/heartbeat` - 设备态心跳（捎带待执行指令）
+- `POST /api/v1/device/commands/:id/ack` - 设备回执指令
 
 详细接口约定见 [后端设计](../docs/backend-design.md) 与 [分阶段开发文档](../docs/backend/README.md)。
 

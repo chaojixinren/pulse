@@ -81,9 +81,8 @@ func NewRouter(cfg *config.Config, db *sql.DB) (*gin.Engine, *worker.AudioProces
 			authed.GET("/account/export", accountHandler.Export)
 			authed.DELETE("/account", accountHandler.Delete)
 
-			authed.POST("/devices/bind-code", deviceHandler.GenerateBindCode)
-			authed.POST("/devices/bind", deviceHandler.Bind)
 			authed.GET("/devices", deviceHandler.List)
+			authed.POST("/devices", deviceHandler.CreateDevice)
 			authed.GET("/devices/:id", deviceHandler.Get)
 			authed.DELETE("/devices/:id", deviceHandler.Unbind)
 			authed.POST("/devices/:id/heartbeat", deviceHandler.Heartbeat)
@@ -95,9 +94,6 @@ func NewRouter(cfg *config.Config, db *sql.DB) (*gin.Engine, *worker.AudioProces
 		// 账号导出乃至删号。这里只暴露设备真正需要的三个接口。
 		device := v1.Group("/device")
 		{
-			// 免鉴权：设备用一次性绑定码自助换取 device_token。
-			device.POST("/claim", deviceHandler.Claim)
-
 			authedDevice := device.Group("")
 			authedDevice.Use(middleware.DeviceAuth(deviceService))
 			{

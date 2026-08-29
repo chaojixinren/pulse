@@ -19,19 +19,6 @@ CREATE TABLE IF NOT EXISTS devices (
     CONSTRAINT fk_devices_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS device_bind_codes (
-    id         CHAR(36)    NOT NULL,
-    user_id    CHAR(36)    NOT NULL,
-    code       VARCHAR(50) NOT NULL,
-    expires_at DATETIME    NOT NULL,
-    used_at    DATETIME    NULL,
-    created_at DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    UNIQUE KEY uq_device_bind_codes_code (code),
-    KEY idx_device_bind_codes_user_id (user_id),
-    CONSTRAINT fk_device_bind_codes_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 CREATE TABLE IF NOT EXISTS device_commands (
     id         CHAR(36)    NOT NULL,
     device_id  CHAR(36)    NOT NULL,

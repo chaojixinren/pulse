@@ -6,58 +6,52 @@ async function goToDevices(page: Page): Promise<void> {
   await page.waitForURL('**/devices');
 }
 
-test('设备列表空态展示生成绑定码与绑定入口', async ({ page }) => {
+test('设备列表空态展示绑定入口', async ({ page }) => {
   await login(page);
   await goToDevices(page);
 
   await expect(page.getByRole('heading', { name: '设备管理' })).toBeVisible();
   await expect(page.getByText('还没有设备')).toBeVisible();
-  await expect(page.getByRole('button', { name: '生成绑定码' })).toBeVisible();
   await expect(page.getByRole('button', { name: '去绑定设备' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '绑定设备', exact: true })).toBeVisible();
 });
 
-test('生成绑定码显示一次性绑定码与有效期', async ({ page }) => {
+test('绑定设备全流程：填写设备 ID → 创建成功 → 抄录 token → 列表出现设备', async ({ page }) => {
   await login(page);
   await goToDevices(page);
 
-  await page.getByRole('button', { name: '生成绑定码' }).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
-  await expect(dialog.locator('.bind-code-value')).toHaveText('BINDCODE1');
-  await expect(dialog.getByText(/有效期剩余/)).toBeVisible();
-  await expect(dialog.getByRole('button', { name: '复制绑定码' })).toBeVisible();
-});
-
-test('绑定设备全流程：生成码 → 绑定 → token 一次性展示 → 列表出现', async ({ page }) => {
-  await login(page);
-  await goToDevices(page);
-
-  // 生成绑定码并读取其内容
-  await page.getByRole('button', { name: '生成绑定码' }).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog.locator('.bind-code-value')).toBeVisible();
-  const code = ((await dialog.locator('.bind-code-value').textContent()) ?? '').trim();
-  expect(code).toBe('BINDCODE1');
-  await dialog.locator('.modal-close').click();
-
-  // 用绑定码 + 设备 ID 完成绑定
+  // 进入绑定页，填写设备 ID + 设备名称
   await page.getByRole('button', { name: '绑定设备', exact: true }).click();
   await page.waitForURL('**/devices/bind');
-  await page.getByLabel('设备 ID *').fill('HW-2024');
+  await page.getByLabel('设备 ID *').fill('pulse-001');
   await page.getByLabel('设备名称').fill('办公麦克风');
-  await page.getByLabel('绑定码 *').fill(code);
-  await page.getByRole('button', { name: '绑定', exact: true }).click();
+  await page.getByRole('button', { name: '创建并获取 token', exact: true }).click();
 
-  // 绑定成功：展示一次性 token 与设备信息
-  await expect(page.getByRole('heading', { name: '绑定成功' })).toBeVisible();
-  await expect(page.getByText('设备「办公麦克风」已绑定成功。')).toBeVisible();
-  await expect(page.locator('.bind-token-value')).toContainText('tok-');
-  await expect(page.getByText(/仅在本次展示一次/)).toBeVisible();
+  // 创建成功后展示一次性 token
+  await expect(page.getByRole('heading', { name: '设备已创建' })).toBeVisible();
+  await expect(page.getByTestId('device-token')).toBeVisible();
+
+  // 抄录完成后进入设备详情
+  await page.getByRole('button', { name: '我已抄录，完成' }).click();
+  await page.waitForURL(/\/devices\/d-/);
+  await expect(page.getByRole('heading', { name: '办公麦克风' })).toBeVisible();
 
   // 返回列表，设备已出现在列表中
-  await page.getByRole('button', { name: '返回设备列表' }).click();
+  await page.getByRole('button', { name: '返回列表' }).click();
   await page.waitForURL('**/devices');
   await expect(page.getByText('办公麦克风')).toBeVisible();
+});
+
+test('设备已被占用时展示后端错误', async ({ page }) => {
+  await login(page);
+  await goToDevices(page);
+
+  await page.getByRole('button', { name: '绑定设备', exact: true }).click();
+  await page.waitForURL('**/devices/bind');
+  await page.getByLabel('设备 ID *').fill('taken');
+  await page.getByRole('button', { name: '创建并获取 token', exact: true }).click();
+
+  await expect(page.getByText('该设备已被其他用户绑定')).toBeVisible();
 });
 
 test('设备列表展示在线状态、电量与固件', async ({ page }) => {

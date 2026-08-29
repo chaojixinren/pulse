@@ -16,39 +16,6 @@ type DeviceHandler struct {
 
 func NewDeviceHandler(svc *service.DeviceService) *DeviceHandler { return &DeviceHandler{svc: svc} }
 
-// GenerateBindCode 生成一次性绑定码。
-func (h *DeviceHandler) GenerateBindCode(c *gin.Context) {
-	userID := currentUserID(c)
-	code, err := h.svc.GenerateBindCode(c.Request.Context(), userID)
-	if err != nil {
-		fail(c, err)
-		return
-	}
-	response.OK(c, code)
-}
-
-type bindDeviceRequest struct {
-	DeviceID string `json:"device_id" binding:"required"`
-	Name     string `json:"name"`
-	BindCode string `json:"bind_code" binding:"required"`
-}
-
-// Bind 绑定设备，返回设备信息与一次性设备 token。
-func (h *DeviceHandler) Bind(c *gin.Context) {
-	userID := currentUserID(c)
-	var req bindDeviceRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		fail(c, apperrors.NewBadRequest("参数错误: "+err.Error()))
-		return
-	}
-	device, token, err := h.svc.Bind(c.Request.Context(), userID, req.DeviceID, req.Name, req.BindCode)
-	if err != nil {
-		fail(c, err)
-		return
-	}
-	response.OK(c, gin.H{"device": device, "device_token": token})
-}
-
 func (h *DeviceHandler) List(c *gin.Context) {
 	userID := currentUserID(c)
 	list, err := h.svc.List(c.Request.Context(), userID)
@@ -119,31 +86,6 @@ func (h *DeviceHandler) Command(c *gin.Context) {
 	response.OK(c, cmd)
 }
 
-type claimDeviceRequest struct {
-	DeviceID string `json:"device_id" binding:"required"`
-	Name     string `json:"name"`
-	BindCode string `json:"bind_code" binding:"required"`
-}
-
-// Claim 设备自助配对（免鉴权）：device_id + 一次性绑定码 → device_token。
-// 设备把返回的 token 写进 NVS 即可，无需人工把 token 抄进 TF 卡。
-//
-// 该端点不带任何鉴权，屏障只有绑定码本身（6 位数字 / 10 分钟 / 一次性），
-// 且按产品决策未加尝试次数限制。
-func (h *DeviceHandler) Claim(c *gin.Context) {
-	var req claimDeviceRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		fail(c, apperrors.NewBadRequest("参数错误: "+err.Error()))
-		return
-	}
-	device, token, err := h.svc.Claim(c.Request.Context(), req.DeviceID, req.Name, req.BindCode)
-	if err != nil {
-		fail(c, err)
-		return
-	}
-	response.OK(c, gin.H{"device": device, "device_token": token})
-}
-
 // DeviceHeartbeat 设备级心跳（Authorization: Device <token>）。
 // 设备身份由 token 反解，不需要在 URL 里带 id。
 // 响应捎带待执行指令与服务端时间，省掉一次独立请求。
@@ -195,4 +137,35 @@ func (h *DeviceHandler) AckCommand(c *gin.Context) {
 		return
 	}
 	response.OKMessage(c, "回执已记录")
+}
+
+// ========== Device 创建/绑定（App 领养，一次性下发 token） ==========
+
+type createDeviceRequest struct {
+	DeviceID string `json:"device_id" binding:"required"`
+	Name     string `json:"name"`
+}
+
+// CreateDevice App 用户创建设备绑定，一次性返回 device_token 供抄录到硬件。
+// POST /api/v1/devices
+func (h *DeviceHandler) CreateDevice(c *gin.Context) {
+	userID := currentUserID(c)
+	if userID == "" {
+		fail(c, apperrors.ErrUnauthorized)
+		return
+	}
+	var req createDeviceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, apperrors.NewBadRequest("参数错误: "+err.Error()))
+		return
+	}
+	device, token, err := h.svc.CreateDevice(c.Request.Context(), userID, req.DeviceID, req.Name)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{
+		"device":       device,
+		"device_token": token,
+	})
 }

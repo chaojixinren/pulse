@@ -71,20 +71,3 @@ func TestE2EDeviceHeartbeatInvalidBattery(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, w.Code, "响应: %s", w.Body.String())
 	assert.Equal(t, float64(40000), decode(t, w)["code"])
 }
-
-func TestE2EDeviceBindInvalidCode(t *testing.T) {
-	router, mock, _ := newE2ERouter(t)
-	token := e2eToken(t, "u1")
-	now := time.Now().UTC()
-
-	// 绑定码已使用（used_at 非空）→ 一次性校验失败
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, user_id, code")).
-		WithArgs("123456").
-		WillReturnRows(sqlmock.NewRows(e2eBindCodeCols).AddRow("c1", "u1", "123456", now.Add(time.Hour), now, now))
-
-	body, ct := jsonReq(t, map[string]string{"device_id": "dev-1", "name": "手表", "bind_code": "123456"})
-	w := perform(router, http.MethodPost, "/api/v1/devices/bind", body, ct, token)
-	require.Equal(t, http.StatusBadRequest, w.Code, "响应: %s", w.Body.String())
-	assert.Equal(t, float64(40000), decode(t, w)["code"])
-	assert.NoError(t, mock.ExpectationsWereMet())
-}
