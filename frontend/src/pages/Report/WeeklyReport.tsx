@@ -114,7 +114,6 @@ export function Component() {
             <div className="card">
               <ExtractedList
                 items={report.top_todos}
-                emptyIcon="✅"
                 emptyTitle="暂无待办"
                 checkable
               />

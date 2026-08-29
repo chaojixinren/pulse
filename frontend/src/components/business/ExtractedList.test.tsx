@@ -11,7 +11,7 @@ describe('ExtractedList', () => {
   });
 
   it('空列表展示空态', () => {
-    render(<ExtractedList items={[]} emptyIcon="✅" emptyTitle="暂无待办" />);
+    render(<ExtractedList items={[]} emptyTitle="暂无待办" />);
     expect(screen.getByText('暂无待办')).toBeInTheDocument();
   });
 

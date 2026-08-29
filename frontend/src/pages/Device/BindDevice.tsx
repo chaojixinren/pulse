@@ -94,7 +94,6 @@ export function Component() {
       <div className="card">
         {result ? (
           <div className="bind-success">
-            <div className="bind-success-icon">✅</div>
             <h2>设备已创建</h2>
             <p className="bind-token-hint">
               token 仅显示这一次，请立即抄录到硬件 config.json（cloud.auth_token），关闭后无法再次查看。

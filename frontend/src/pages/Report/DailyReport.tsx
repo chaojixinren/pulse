@@ -120,7 +120,6 @@ export function Component() {
             <div className="card">
               <ExtractedList
                 items={report.todos}
-                emptyIcon="✅"
                 emptyTitle="暂无待办"
                 checkable
               />

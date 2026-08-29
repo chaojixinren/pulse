@@ -4,7 +4,6 @@ import { Empty } from '@/components/common/Empty';
 export interface ExtractedListProps {
   items: string[];
   emptyTitle?: string;
-  emptyIcon?: string;
   // 待办列表可勾选（本地完成状态，Phase 3 可选持久化）。
   checkable?: boolean;
 }
@@ -13,13 +12,12 @@ export interface ExtractedListProps {
 export function ExtractedList({
   items,
   emptyTitle = '暂无内容',
-  emptyIcon,
   checkable = false,
 }: ExtractedListProps) {
   const [checked, setChecked] = useState<Set<number>>(() => new Set());
 
   if (items.length === 0) {
-    return <Empty icon={emptyIcon} title={emptyTitle} />;
+    return <Empty title={emptyTitle} />;
   }
 
   const toggle = (idx: number) => {
