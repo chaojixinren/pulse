@@ -105,7 +105,7 @@ export function Component() {
           <Button onClick={() => load(query)}>重试</Button>
         </div>
       ) : !report || !hasData ? (
-        <Empty icon="📊" title="该区间暂无数据" description="所选日期范围内没有语音会话记录。" />
+        <Empty title="该区间暂无数据" description="所选日期范围内没有语音会话记录。" />
       ) : (
         <>
           <div className="summary-grid">

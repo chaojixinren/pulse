@@ -23,7 +23,7 @@ export function IdentityCard({
           className="identity-avatar"
           style={{ backgroundColor: identity.color || '#3b82f6' }}
         >
-          {identity.icon || '🙂'}
+          {identity.icon || identity.name.charAt(0)}
         </div>
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>

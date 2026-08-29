@@ -19,7 +19,6 @@ const COLOR_OPTIONS = [
   '#6b7280',
 ];
 const DEFAULT_COLOR = '#3b82f6';
-const DEFAULT_ICON = '🙂';
 
 interface IdentityFormState {
   name: string;
@@ -33,7 +32,7 @@ const emptyForm: IdentityFormState = {
   name: '',
   description: '',
   color: DEFAULT_COLOR,
-  icon: DEFAULT_ICON,
+  icon: '',
   is_default: false,
 };
 
@@ -82,7 +81,7 @@ export function Component() {
       name: identity.name,
       description: identity.description ?? '',
       color: identity.color || DEFAULT_COLOR,
-      icon: identity.icon || DEFAULT_ICON,
+      icon: identity.icon || '',
       is_default: identity.is_default,
     });
     setFormError(null);
@@ -106,7 +105,7 @@ export function Component() {
       name,
       description: form.description.trim() || undefined,
       color: form.color,
-      icon: form.icon.trim() || DEFAULT_ICON,
+      icon: form.icon.trim() || undefined,
       is_default: form.is_default,
     };
 
@@ -180,7 +179,6 @@ export function Component() {
 
       {identities.length === 0 ? (
         <Empty
-          icon="🎭"
           title="还没有身份"
           description="创建你的第一个身份，开始记录语音会话。"
           action={<Button onClick={openCreate}>创建身份</Button>}
@@ -254,7 +252,7 @@ export function Component() {
               className="form-input"
               value={form.icon}
               onChange={(e) => setForm({ ...form, icon: e.target.value })}
-              placeholder="例如：🙂（emoji）"
+              placeholder="可选，留空则显示首字符"
             />
           </div>
           <div className="form-field">

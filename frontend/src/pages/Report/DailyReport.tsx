@@ -77,7 +77,6 @@ export function Component() {
         </div>
       ) : !report || !hasData ? (
         <Empty
-          icon="📊"
           title="该日期暂无数据"
           description="这一天没有语音会话记录。"
         />
@@ -102,7 +101,7 @@ export function Component() {
             <h2 className="section-title">按身份拆分</h2>
             <div className="card">
               {report.by_identity.length === 0 ? (
-                <Empty icon="👤" title="暂无身份统计" />
+                <Empty title="暂无身份统计" />
               ) : (
                 report.by_identity.map((stat) => (
                   <div key={stat.identity_id} className="identity-stat-row">
@@ -131,7 +130,7 @@ export function Component() {
           <div className="report-section">
             <h2 className="section-title">笔记</h2>
             <div className="card">
-              <ExtractedList items={report.notes} emptyIcon="📝" emptyTitle="暂无笔记" />
+              <ExtractedList items={report.notes} emptyTitle="暂无笔记" />
             </div>
           </div>
         </>

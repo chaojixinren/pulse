@@ -29,7 +29,6 @@ export function DeviceCard({ device, onClick }: DeviceCardProps) {
       onKeyDown={clickable ? handleKeyDown : undefined}
     >
       <div className="device-card-head">
-        <div className="device-avatar">📡</div>
         <div className="device-card-title">
           <div className="device-name-row">
             <span className="device-name">{device.name}</span>

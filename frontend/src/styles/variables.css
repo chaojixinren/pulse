@@ -1,11 +1,14 @@
 :root {
-  /* 主色调 */
-  --color-primary: #3b82f6;
-  --color-primary-hover: #2563eb;
-  --color-primary-active: #1d4ed8;
-  --color-primary-soft: #eff6ff;
+  /* === 主色调（温暖专业风格）=== */
+  --color-primary: #8b2252; /* 深紫红/酒红色 - 主要按钮、链接 */
+  --color-primary-hover: #6f1a41;
+  --color-primary-active: #5a1535;
+  --color-primary-soft: #fce8ee;
 
-  /* 语义色 */
+  /* 强调色 */
+  --color-accent: #c4536a; /* 玫瑰红 - 列表圆点、高亮 */
+
+  /* === 语义色 === */
   --color-success: #10b981;
   --color-success-soft: #ecfdf5;
   --color-warning: #f59e0b;
@@ -15,51 +18,57 @@
   --color-info: #3b82f6;
   --color-info-soft: #eff6ff;
 
-  /* 中性色 */
-  --color-text-primary: #1f2937;
-  --color-text-secondary: #6b7280;
+  /* === 中性色（温暖米色系）=== */
+  --color-text-primary: #2d1b14; /* 深棕色 - 主要文字 */
+  --color-text-secondary: #6b5847; /* 中棕色 - 次要文字 */
   --color-text-disabled: #9ca3af;
-  --color-border: #e5e7eb;
-  --color-background: #ffffff;
-  --color-background-secondary: #f9fafb;
-  --color-background-tertiary: #f3f4f6;
+  --color-border: #e8d5c8; /* 浅棕色边框 */
+  --color-background: #ffffff; /* 纯白 - 卡片背景 */
+  --color-background-secondary: #fdf6f0; /* 温暖淡米色 - 页面背景 */
+  --color-background-tertiary: #f5ebe3; /* 次要背景 */
+  --color-muted: #f5ebe3; /* 静音背景 */
 
-  /* 阴影 */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  /* === 阴影 === */
+  --shadow-sm: 0 1px 2px 0 rgba(45, 27, 20, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(45, 27, 20, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(45, 27, 20, 0.1);
 
-  /* 圆角 */
+  /* === 圆角 === */
   --radius-sm: 4px;
   --radius-md: 8px;
-  --radius-lg: 12px;
+  --radius-lg: 12px; /* 0.75rem - 卡片圆角 */
+  --radius-xl: 16px; /* 1rem - 大卡片圆角 */
+  --radius-full: 9999px; /* 全圆角按钮 */
 
-  /* 间距 */
+  /* === 间距 === */
   --spacing-xs: 4px;
   --spacing-sm: 8px;
-  --spacing-md: 16px;
-  --spacing-lg: 24px;
-  --spacing-xl: 32px;
+  --spacing-md: 16px; /* 1rem */
+  --spacing-lg: 24px; /* 1.5rem */
+  --spacing-xl: 32px; /* 2rem */
 
-  /* 字体 */
-  --font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
-  --font-family-mono: "SF Mono", Monaco, "Cascadia Code", "JetBrains Mono", monospace;
+  /* === 字体族 === */
+  --font-family-base: "Inter", "Segoe UI", "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-family-serif: "Georgia", "Times New Roman", serif; /* 标题用衬线字体 */
+  --font-family-mono: ui-monospace, "SF Mono", Monaco, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
 
-  /* 字号 */
-  --font-size-xs: 12px;
-  --font-size-sm: 14px;
-  --font-size-base: 16px;
-  --font-size-lg: 18px;
-  --font-size-xl: 20px;
-  --font-size-2xl: 24px;
-  --font-size-3xl: 30px;
+  /* === 字号层级 === */
+  --font-size-xs: 0.75rem; /* 12px - 辅助文字 */
+  --font-size-sm: 0.875rem; /* 14px - 正文小号 */
+  --font-size-base: 1rem; /* 16px - 正文常规 */
+  --font-size-lg: 1.125rem; /* 18px - 正文大号 */
+  --font-size-xl: 1.25rem; /* 20px - 小标题 */
+  --font-size-2xl: 1.5rem; /* 24px - 小标题 */
+  --font-size-3xl: 1.875rem; /* 30px - 大标题 */
+  --font-size-4xl: 2.25rem; /* 36px */
+  --font-size-5xl: 3rem; /* 48px - Hero大标题 */
 
-  /* 行高 */
+  /* === 行高 === */
   --line-height-tight: 1.25;
   --line-height-base: 1.5;
   --line-height-relaxed: 1.75;
 
-  /* 字重 */
+  /* === 字重 === */
   --font-weight-normal: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
