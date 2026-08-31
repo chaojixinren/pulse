@@ -18,6 +18,15 @@
 
 ---
 
+## 🖼️ 产品预览
+
+<p align="center">
+  <img src="assets/screenshot-1.png" alt="拾笺 产品界面预览 1" width="49%" />
+  <img src="assets/screenshot-2.png" alt="拾笺 产品界面预览 2" width="49%" />
+</p>
+
+---
+
 ## 🌟 为什么选择拾笺
 
 在忙碌的现代生活中，我们每个人都在扮演着多重角色——
